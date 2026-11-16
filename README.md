@@ -14,7 +14,9 @@ play your X-Station sounds on the MPC.
 > or Jamiroquai. "Novation" and "X-Station" are trademarks of their owners. No Novation sounds,
 > samples or firmware are included; all code is original (MIT licence).
 
-![Jamiro background](plugins/Jamiro/art/jamiro_bg_public.png)
+![Jamiro on the MPC screen (FILT/ENV page)](docs/jamiro-screen.png)
+
+*Preview of the FILT/ENV page, drawn from the plugin's skin files.*
 
 ## Features
 
