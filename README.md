@@ -39,8 +39,10 @@ play your X-Station sounds on the MPC.
 |---|---|---|---|
 | MPC Key 37 | Gen 1 (32-bit, armv7) | 3.10.1 or later | 1.0.0 |
 
-Builds are made for both Gen 1 (armv7) and Gen 2 (aarch64) MPCs, but only Gen 1 has been tested
-on hardware so far. Gen 2 owners: reports are very welcome (open an issue).
+Hardware testing so far is a quick listening test on Gen 1: the plugin loads, the screen pages
+show, and the presets play. Editing, automation, the arpeggiator and long sessions have not been
+tested on hardware yet. Builds are also made for Gen 2 (aarch64) MPCs but have not been tried on
+one. Reports from any MPC are very welcome (open an issue).
 
 ## Installing
 
