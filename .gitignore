@@ -1,0 +1,4 @@
+build/
+dist/
+*.syx
+!plugins/Jamiro/Content/Banks/README.txt

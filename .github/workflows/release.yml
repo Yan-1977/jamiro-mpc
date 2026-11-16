@@ -1,0 +1,20 @@
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      version: { required: true }
+      dry_run: { type: boolean, default: true }
+jobs:
+  release:
+    uses: open-mpc/mpc-vst-plugins/.github/workflows/vst-release.yml@5fd7c1f67924dde2610766382ea9c853942887c9
+    permissions: { contents: write }
+    with:
+      tools_ref: 5fd7c1f67924dde2610766382ea9c853942887c9
+      tag: jamiro-v${{ inputs.version }}
+      version: ${{ inputs.version }}
+      sdk_project: plugins/Jamiro
+      plugin_id: jamiro
+      license: MIT
+      about: "Novation X-Station-style polysynth (KS engine): 3 oscillators, filter, 2 envelopes, 2 LFOs, arpeggiator, effects; loads your X-Station .syx banks."
+      user_data: Content/Banks
+      dry_run: ${{ inputs.dry_run }}
