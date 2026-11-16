@@ -33,6 +33,15 @@ play your X-Station sounds on the MPC.
   pan and auto-pan.
 - 6 touch-screen pages, all controls on Q-Links. 7 original programs built in.
 
+## Tested on
+
+| Device | Generation | MPC OS | Version |
+|---|---|---|---|
+| MPC Key 37 | Gen 1 (32-bit, armv7) | 3.10.1 or later | 1.0.0 |
+
+Builds are made for both Gen 1 (armv7) and Gen 2 (aarch64) MPCs, but only Gen 1 has been tested
+on hardware so far. Gen 2 owners: reports are very welcome (open an issue).
+
 ## Installing
 
 Requires MPC OS 3.10.1 or later. Enable **Preferences → Enhancements (Beta) → Enable
