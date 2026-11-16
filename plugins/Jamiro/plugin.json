@@ -1,7 +1,7 @@
 {
   "name": "Jamiro",
   "manufacturer": "Yann",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "format": "vst2",
   "kind": "instrument",
   "uid": "YAUp",
@@ -12,6 +12,6 @@
   "file64": "VST/jamiro-arm64.so",
   "description": "Jamiro: Novation X-Station-style synth (KS engine) - 8 voices, 3 oscillators, filter, 2 envelopes, 2 LFOs, arpeggiator and effects; reads X-Station .syx patch banks.",
   "author": "Yann",
-  "url": "",
+  "url": "https://github.com/Yan-1977/jamiro-mpc",
   "license": "MIT"
 }
