@@ -98,11 +98,14 @@ inline std::vector<std::string> arpRateNames()
 }
 
 // ---------------------------------------------------------------------------
-// Sampled-style waveforms (Organ, E.Piano ...). We build our own single-cycle
-// tables by additive synthesis (no samples are used). There is one band-limited
-// version per octave, each keeping every harmonic below ~0.45 x sample rate, so the
-// tone stays bright up the keyboard without aliasing. Harmonic phases are spread
-// (not all sines in phase) and every table is scaled to the same loudness.
+// Sampled-style waveforms (Organ, E.Piano, Rhodes ...). We build our own tables by
+// additive synthesis (no samples are used). Each instrument has TWO spectra, like a
+// real recording: a bright ATTACK (hammer, tine ping, pluck, organ percussion) and a
+// rounder BODY. Every note starts on the attack and fades to the body at an
+// instrument-specific speed (faster for high notes, brighter for hard velocities).
+// One band-limited version per octave keeps every harmonic below ~0.45 x sample
+// rate, so the tone stays even up the keyboard without aliasing. Both spectra of a
+// table are scaled to the same loudness, so the fade changes colour, not level.
 // ---------------------------------------------------------------------------
 class WaveTables
 {
@@ -124,99 +127,125 @@ public:
         return kLevels - 1;
     }
 
-    // phase 0..1, table 0..8, level from levelFor()
-    float read(int table, float phase, int level) const
+    // Seconds for the attack colour to fade (at middle C) for each table.
+    static float fadeSeconds(int table)
     {
-        const float* t = data_[clamp(table, 0, kTables - 1)][clamp(level, 0, kLevels - 1)];
+        static const float kFade[kTables] = { 0.28f, 1.1f, 0.55f, 0.35f, 0.7f, 1.3f, 0.8f, 0.6f, 0.4f };
+        return kFade[clamp(table, 0, kTables - 1)];
+    }
+
+    // phase 0..1, table 0..8, level from levelFor(), bright 1 = attack .. 0 = body
+    float read(int table, float phase, int level, float bright) const
+    {
+        const int tb = clamp(table, 0, kTables - 1), lv = clamp(level, 0, kLevels - 1);
         const float pos = phase * (float)kSize;
         int i = (int)pos;
         if (i >= kSize) i = kSize - 1;
         const float f = pos - (float)i;
-        return t[i] + f * (t[i + 1] - t[i]);
+        const float* b = data_[tb][0][lv];
+        const float body = b[i] + f * (b[i + 1] - b[i]);
+        if (bright <= 0.001f) return body;
+        const float* a = data_[tb][1][lv];
+        const float att = a[i] + f * (a[i + 1] - a[i]);
+        return body + bright * (att - body);
     }
 
 private:
-    // Highest fundamental of level 0 is 27.5 Hz at 44.1 kHz; each level doubles it.
     static constexpr float kBaseInc = 27.5f / 44100.0f;
 
     WaveTables()
     {
+        // Sine lookup for fast additive synthesis (index = harmonic * sample, mod size).
+        std::vector<double> sine((size_t)kSize);
+        for (int i = 0; i < kSize; ++i) sine[(size_t)i] = std::sin((double)kTwoPi * (double)i / (double)kSize);
         std::vector<double> acc((size_t)kSize + 1);
         for (int tb = 0; tb < kTables; ++tb)
-        {
-            float gain = 1.0f;
-            for (int lv = 0; lv < kLevels; ++lv)
+            for (int part = 0; part < 2; ++part)
             {
-                const double topInc = (double)kBaseInc * std::pow(2.0, lv);
-                int maxH = (int)(0.45 / topInc);
-                if (maxH > kMaxHarmonics) maxH = kMaxHarmonics;
-                if (maxH < 1) maxH = 1;
-                std::fill(acc.begin(), acc.end(), 0.0);
-                for (int n = 1; n <= maxH; ++n)
+                float gain = 1.0f;
+                for (int lv = 0; lv < kLevels; ++lv)
                 {
-                    const double a = amp(tb, n);
-                    if (a == 0.0) continue;
-                    // Fixed, spread phases: same timbre, lower peaks than all-sine-phase.
-                    const double ph = n == 1 ? 0.0 : (double)kTwoPi * std::fmod(0.6180339887 * n * n, 1.0);
-                    for (int i = 0; i <= kSize; ++i)
-                        acc[(size_t)i] += a * std::sin((double)kTwoPi * (double)n * (double)i / (double)kSize + ph);
+                    const double topInc = (double)kBaseInc * std::pow(2.0, lv);
+                    int maxH = (int)(0.45 / topInc);
+                    if (maxH > kMaxHarmonics) maxH = kMaxHarmonics;
+                    if (maxH < 1) maxH = 1;
+                    std::fill(acc.begin(), acc.end(), 0.0);
+                    for (int n = 1; n <= maxH; ++n)
+                    {
+                        const double a = amp(tb, part == 1, n);
+                        if (a == 0.0) continue;
+                        // Fixed, spread phases (same for attack and body so the fade is smooth).
+                        const int ph = n == 1 ? 0 : (int)(std::fmod(0.6180339887 * n * n, 1.0) * kSize);
+                        for (int i = 0; i < kSize; ++i)
+                            acc[(size_t)i] += a * sine[(size_t)((n * i + ph) & (kSize - 1))];
+                    }
+                    acc[(size_t)kSize] = acc[0];
+                    if (lv == 0)
+                    {
+                        double rms = 0.0, peak = 1e-9;
+                        for (int i = 0; i < kSize; ++i) { rms += acc[(size_t)i] * acc[(size_t)i]; peak = std::fmax(peak, std::fabs(acc[(size_t)i])); }
+                        rms = std::sqrt(rms / kSize);
+                        gain = (float)std::fmin(0.58 / std::fmax(rms, 1e-9), 0.98 / peak);
+                    }
+                    float* t = data_[tb][part][lv];
+                    for (int i = 0; i <= kSize; ++i) t[i] = clamp((float)acc[(size_t)i] * gain, -1.0f, 1.0f);
                 }
-                if (lv == 0)
-                {
-                    // Loudness: RMS 0.58 (same as a full-scale saw), peaks kept below 1.
-                    double rms = 0.0, peak = 1e-9;
-                    for (int i = 0; i < kSize; ++i) { rms += acc[(size_t)i] * acc[(size_t)i]; peak = std::fmax(peak, std::fabs(acc[(size_t)i])); }
-                    rms = std::sqrt(rms / kSize);
-                    gain = (float)std::fmin(0.58 / std::fmax(rms, 1e-9), 0.98 / peak);
-                }
-                float* t = data_[tb][lv];
-                for (int i = 0; i <= kSize; ++i) t[i] = clamp((float)acc[(size_t)i] * gain, -1.0f, 1.0f);
             }
-        }
     }
 
-    // Harmonic recipes (original, by ear): amplitude of harmonic n for each table.
-    static double amp(int table, int n)
+    // Harmonic recipes (original, by ear). attack = true for the bright onset spectrum.
+    static double amp(int table, bool attack, int n)
     {
         const double fn = (double)n;
         const double pi = (double)kPi;
+        auto pick = [n](std::initializer_list<std::pair<int, double>> l) {
+            for (const auto& p : l) if (p.first == n) return p.second;
+            return 0.0;
+        };
         switch (table)
         {
-            case 0: // Organ: drawbars 8, 4, 2 2/3, 2, 1 3/5, 1 1/3 and 1 foot plus a little bite
-                switch (n) { case 1: return 1.0; case 2: return 0.8; case 3: return 0.6; case 4: return 0.55;
-                             case 5: return 0.15; case 6: return 0.35; case 8: return 0.3; case 10: return 0.1;
-                             case 12: return 0.12; case 16: return 0.08; default: return 0.0; }
-            case 1: // Harpsichord: bright string plucked close to its end
-                return n <= 96 ? (0.25 + 0.75 * std::fabs(std::sin(pi * fn * 0.11))) / std::pow(fn, 0.7) : 0.0;
-            case 2: // E.Piano: FM-style tine piano, warm body plus a metallic top
-                switch (n) { case 1: return 1.0; case 2: return 0.6; case 3: return 0.25; case 4: return 0.18;
-                             case 5: return 0.1; case 6: return 0.08; case 7: return 0.22; case 8: return 0.18;
-                             case 9: return 0.12; case 10: return 0.06; case 13: return 0.05; case 14: return 0.08;
-                             case 15: return 0.06; default: return 0.0; }
-            case 3: // Slap bass: string pop around harmonics 3-8
-                return n <= 64 ? ((n >= 3 && n <= 8) ? 1.6 : 1.0) * (n > 20 ? 0.6 : 1.0) / std::pow(fn, 0.85) : 0.0;
-            case 4: // Rhodes: round fundamental with the bark of the upper partials
-                switch (n) { case 1: return 1.0; case 2: return 0.55; case 3: return 0.3; case 4: return 0.2;
-                             case 5: return 0.12; case 6: return 0.1; case 7: return 0.07; case 8: return 0.05;
-                             case 9: return 0.04; case 10: return 0.03; default: return 0.0; }
-            case 5: // Rhodes tine: bell-like
-                switch (n) { case 1: return 1.0; case 2: return 0.35; case 3: return 0.12; case 4: return 0.3;
-                             case 6: return 0.12; case 7: return 0.45; case 9: return 0.15; case 11: return 0.12;
-                             case 14: return 0.25; case 17: return 0.08; case 21: return 0.06; default: return 0.0; }
-            case 6: // Wurly: reedy, strong odd harmonics
-                switch (n) { case 1: return 1.0; case 2: return 0.45; case 3: return 0.75; case 4: return 0.3;
-                             case 5: return 0.55; case 6: return 0.2; case 7: return 0.4; case 8: return 0.12;
-                             case 9: return 0.28; case 10: return 0.08; case 11: return 0.18; case 13: return 0.12;
-                             case 15: return 0.08; default: return 0.0; }
-            case 7: // Clavinet: thin, nasal pickup-comb spectrum
-                return n <= 120 ? std::pow(std::fabs(std::sin(pi * fn * 0.09)), 0.8) / std::pow(fn, 0.75) : 0.0;
-            case 8: // Analog bass: soft saw with a resonant bump
-                return n <= 96 ? ((n >= 3 && n <= 5) ? 1.5 : 1.0) / (fn * (1.0 + (fn / 12.0) * (fn / 12.0))) : 0.0;
+            case 0: // Organ: drawbars 8, 4, 2 2/3, 2, 1 3/5, 1 1/3, 1; attack adds the 3rd-harmonic percussion
+            {
+                const double body = pick({{1, 1.0}, {2, 0.8}, {3, 0.6}, {4, 0.55}, {5, 0.15}, {6, 0.35}, {8, 0.3},
+                                          {10, 0.1}, {12, 0.12}, {16, 0.08}});
+                return attack ? body + pick({{3, 1.2}, {6, 0.25}, {9, 0.15}}) : body;
+            }
+            case 1: // Harpsichord: very bright pluck settling to a softer string
+                if (n > 120) return 0.0;
+                return attack ? (0.25 + 0.75 * std::fabs(std::sin(pi * fn * 0.11))) / std::pow(fn, 0.55)
+                              : (0.3 + 0.7 * std::fabs(std::sin(pi * fn * 0.11))) / std::pow(fn, 1.15);
+            case 2: // E.Piano (FM-style tine piano): metallic ping at 7-8 and 13-15, then a sweet two-partial body
+                return attack ? pick({{1, 1.0}, {2, 0.7}, {3, 0.3}, {4, 0.25}, {5, 0.15}, {6, 0.12}, {7, 0.45}, {8, 0.35},
+                                      {9, 0.2}, {13, 0.25}, {14, 0.4}, {15, 0.25}, {21, 0.08}})
+                              : pick({{1, 1.0}, {2, 0.45}, {3, 0.12}, {4, 0.06}, {5, 0.03}});
+            case 3: // Slap bass: snappy string pop, then a round low body
+                if (n > 80) return 0.0;
+                return attack ? ((n >= 3 && n <= 12) ? 1.8 : 1.0) / std::pow(fn, 0.6)
+                              : 1.0 / std::pow(fn, 1.5);
+            case 4: // Rhodes: bark and bell tine on the attack, a warm almost-sine body
+                return attack ? pick({{1, 1.0}, {2, 0.9}, {3, 0.55}, {4, 0.45}, {5, 0.3}, {6, 0.22}, {7, 0.35}, {8, 0.3},
+                                      {9, 0.2}, {10, 0.12}, {13, 0.1}, {14, 0.15}})
+                              : pick({{1, 1.0}, {2, 0.28}, {3, 0.09}, {4, 0.05}, {5, 0.02}});
+            case 5: // Rhodes tine: strong bell partials ringing longer
+                return attack ? pick({{1, 1.0}, {2, 0.4}, {3, 0.15}, {4, 0.35}, {6, 0.15}, {7, 0.6}, {9, 0.2},
+                                      {11, 0.15}, {14, 0.4}, {17, 0.12}, {21, 0.1}})
+                              : pick({{1, 1.0}, {2, 0.25}, {4, 0.1}, {7, 0.12}});
+            case 6: // Wurly: reedy bite with strong odd harmonics, mellowing out
+                return attack ? pick({{1, 1.0}, {2, 0.5}, {3, 0.85}, {4, 0.35}, {5, 0.65}, {6, 0.25}, {7, 0.5},
+                                      {8, 0.15}, {9, 0.35}, {10, 0.1}, {11, 0.25}, {13, 0.15}, {15, 0.1}})
+                              : pick({{1, 1.0}, {2, 0.3}, {3, 0.4}, {4, 0.1}, {5, 0.15}, {7, 0.05}});
+            case 7: // Clavinet: thin, nasal pickup comb, softening as the string decays
+                if (n > 120) return 0.0;
+                return std::pow(std::fabs(std::sin(pi * fn * 0.09)), 0.8) / std::pow(fn, attack ? 0.6 : 1.05);
+            case 8: // Analog bass: resonant saw pluck closing to a soft round tone
+                if (n > 96) return 0.0;
+                return attack ? ((n >= 3 && n <= 6) ? 1.6 : 1.0) / (fn * (1.0 + (fn / 24.0) * (fn / 24.0)))
+                              : 1.0 / (fn * (1.0 + (fn / 6.0) * (fn / 6.0)));
         }
         return 0.0;
     }
 
-    float data_[kTables][kLevels][kSize + 1];
+    float data_[kTables][2][kLevels][kSize + 1];
 };
 
 inline float polyBlep(float t, float dt)
@@ -241,6 +270,7 @@ struct Osc
     float phase = 0.0f, inc = 0.0f;
     float n1 = 0.0f, n2 = 0.0f;   // noise filter states
     int tableLevel = 0;           // band-limit level for the table waves (set with inc)
+    float bright = 0.0f;          // table waves: 1 = attack colour .. 0 = body (fades per note)
     bool wrapped = false;
 
     // Advance one sample. Returns true if the phase wrapped (for hard sync).
@@ -279,7 +309,7 @@ struct Osc
             case kHPNoise: { const float x = rng.nextBipolar(); n1 += 0.15f * (x - n1); return (x - n1) * 1.2f; }
             case kBPNoise: { const float x = rng.nextBipolar(); n1 += 0.25f * (x - n1); n2 += 0.05f * (n1 - n2); return (n1 - n2) * 3.0f; }
             case kHBPNoise:{ const float x = rng.nextBipolar(); n1 += 0.6f * (x - n1); n2 += 0.25f * (n1 - n2); return (n1 - n2) * 2.0f; }
-            default: return tables.read(wave - kFirstTable, t, tableLevel);
+            default: return tables.read(wave - kFirstTable, t, tableLevel, bright);
         }
     }
 };
@@ -584,6 +614,160 @@ private:
     int combPos_[2][kCombs] = {}, combLen_[2][kCombs] = {}, apPos_[2][kAps] = {}, apLen_[2][kAps] = {};
     float combLp_[2][kCombs] = {};
     float sr_ = 44100.0f, send_ = 0.0f, fb_ = 0.8f;
+};
+
+// Transparent stereo peak limiter with 1.5 ms look-ahead. It turns the level down
+// before a peak arrives instead of bending the waveform, so loud settings (Mix Level,
+// Volume, big unison chords) get louder without crackling. Ceiling -0.7 dBFS.
+class PeakLimiter
+{
+public:
+    static constexpr int kLook = 64;
+    void prepare(double sr)
+    {
+        const float fs = (float)sr;
+        att_ = 1.0f - std::exp(-1.0f / (0.0002f * fs));
+        rel_ = 1.0f - std::exp(-1.0f / (0.120f * fs));
+        hold_ = std::exp(-1.0f / (0.0015f * fs));
+        reset();
+    }
+    void reset()
+    {
+        for (int i = 0; i < kLook; ++i) bufL_[i] = bufR_[i] = 0.0f;
+        pos_ = 0; holdLeft_ = 0; env_ = 0.0f; gain_ = 1.0f;
+    }
+    void process(float& l, float& r)
+    {
+        const float peak = std::fmax(std::fabs(l), std::fabs(r));
+        // Hold each peak for the whole look-ahead window, so the gain is still down
+        // when that peak leaves the delay line; only then let the envelope fall.
+        if (peak >= env_) { env_ = peak; holdLeft_ = kLook + 2; }
+        else if (holdLeft_ > 0) --holdLeft_;
+        else env_ = std::fmax(peak, env_ * hold_);
+        const float target = env_ > kCeiling ? kCeiling / env_ : 1.0f;
+        gain_ += (target - gain_) * (target < gain_ ? att_ : rel_);
+        const float dl = bufL_[pos_], dr = bufR_[pos_];
+        bufL_[pos_] = l; bufR_[pos_] = r;
+        if (++pos_ >= kLook) pos_ = 0;
+        l = clamp(dl * gain_, -0.999f, 0.999f);
+        r = clamp(dr * gain_, -0.999f, 0.999f);
+    }
+private:
+    static constexpr float kCeiling = 0.92f;
+    float bufL_[kLook] = {}, bufR_[kLook] = {};
+    int pos_ = 0, holdLeft_ = 0;
+    float env_ = 0.0f, gain_ = 1.0f, att_ = 0.1f, rel_ = 0.001f, hold_ = 0.99f;
+};
+
+// Analog-style ADSR. Attack rises along a slightly convex curve and reaches the top in
+// `attackMs`; decay and release fall exponentially with time constants `decayTau` /
+// `releaseTau` (ms), like an RC envelope. Re-triggering starts from the current level
+// (no click), and attack/release never go below a couple of milliseconds.
+class Env
+{
+public:
+    void setSampleRate(double sr) { sr_ = (float)sr; }
+    void set(float attackMs, float decayTau, float sustain, float releaseTau)
+    {
+        attackMs = std::fmax(attackMs, 1.0f);
+        decayTau = std::fmax(decayTau, 0.3f);
+        releaseTau = std::fmax(releaseTau, 1.5f);
+        // attack: level += (1.3 - level) * a, reaching 1.0 after attackMs from 0
+        attackCoef_ = 1.0f - std::exp(-1.4663f / (attackMs * 0.001f * sr_));
+        decayCoef_ = std::exp(-1.0f / (decayTau * 0.001f * sr_));
+        releaseCoef_ = std::exp(-1.0f / (releaseTau * 0.001f * sr_));
+        sustain_ = clamp(sustain, 0.0f, 1.0f);
+    }
+    void noteOn() { stage_ = 1; }
+    void noteOff() { if (stage_ != 0) stage_ = 4; }
+    void reset() { stage_ = 0; level_ = 0.0f; }
+    bool isActive() const { return stage_ != 0; }
+    float level() const { return level_; }
+    float process()
+    {
+        switch (stage_)
+        {
+            case 1: // attack
+                level_ += (1.3f - level_) * attackCoef_;
+                if (level_ >= 1.0f) { level_ = 1.0f; stage_ = 2; }
+                break;
+            case 2: // decay towards sustain
+                level_ = sustain_ + (level_ - sustain_) * decayCoef_;
+                if (level_ - sustain_ < 1e-4f) { level_ = sustain_; stage_ = 3; }
+                break;
+            case 3: // sustain
+                level_ = sustain_;
+                if (sustain_ <= 0.0f) { level_ = 0.0f; stage_ = 0; }
+                break;
+            case 4: // release
+                level_ *= releaseCoef_;
+                if (level_ < 1e-4f) { level_ = 0.0f; stage_ = 0; }
+                break;
+            default: break;
+        }
+        return level_;
+    }
+private:
+    float sr_ = 44100.0f, attackCoef_ = 0.1f, decayCoef_ = 0.999f, releaseCoef_ = 0.999f, sustain_ = 1.0f, level_ = 0.0f;
+    int stage_ = 0;
+};
+
+// Envelope knob (0..127) to time. Attack: 1 ms .. ~16 s to the top. Decay / release time
+// constant: 0.5 ms .. ~8 s (the sound is ~-60 dB after about 7 time constants).
+inline float envAttackMs(float v) { return 1.0f * std::exp2(clamp(v, 0.0f, 127.0f) * (14.0f / 127.0f)); }
+inline float envTauMs(float v)    { return 0.5f * std::exp2(clamp(v, 0.0f, 127.0f) * (14.0f / 127.0f)); }
+
+// Overdrive: tanh saturation that leaves a mid-level signal (0.5) at the same level, so
+// turning it up adds grit and compression instead of a big jump in volume.
+struct Overdrive
+{
+    float g = 1.0f, norm = 1.0f;
+    bool on = false;
+    void set(float amount)   // 0..127
+    {
+        const float a = clamp(amount, 0.0f, 127.0f) / 127.0f;
+        on = a > 0.0f;
+        g = 1.0f + 15.0f * a * a;
+        norm = 0.5f / std::tanh(0.5f * g);
+    }
+    float process(float x) const { return on ? fastTanh(g * x) * norm : x; }
+};
+
+// State-variable filter (Andrew Simper's TPT form, public technique) with a soft
+// saturator on the band-pass state. That keeps it clean at normal settings, lets the
+// resonance get thick and "squelchy", and lets it self-oscillate (sing a sine at the
+// cutoff) when the damping goes to zero or slightly below at full resonance.
+class ResoSVF
+{
+public:
+    enum Mode { kLP = 0, kBP = 1, kHP = 2 };
+    void setSampleRate(double sr) { sr_ = (float)sr; }
+    void reset() { ic1_ = ic2_ = 0.0f; }
+    // k = damping: 2 = very soft, 1.414 = Butterworth, 0 = self-oscillation edge.
+    void set(float hz, float k)
+    {
+        hz = clamp(hz, 10.0f, 0.45f * sr_);
+        const float g = std::tan(kPi * hz / sr_);
+        k_ = k;
+        a1_ = 1.0f / (1.0f + g * (g + k));
+        a2_ = g * a1_;
+        a3_ = g * a2_;
+    }
+    float process(float x, int mode)
+    {
+        const float v3 = x - ic2_;
+        const float v1 = a1_ * ic1_ + a2_ * v3;
+        const float v2 = ic2_ + a2_ * ic1_ + a3_ * v3;
+        ic1_ = mpc::dsp::flushDenormal(sat(2.0f * v1 - ic1_));
+        ic2_ = mpc::dsp::flushDenormal(2.0f * v2 - ic2_);
+        if (mode == kBP) return v1;
+        if (mode == kHP) return x - k_ * v1 - v2;
+        return v2;
+    }
+private:
+    // Transparent below ~0.5, rounds off towards +-2.
+    static float sat(float s) { return 2.0f * fastTanh(0.5f * s); }
+    float sr_ = 44100.0f, k_ = 1.414f, a1_ = 1.0f, a2_ = 0.0f, a3_ = 0.0f, ic1_ = 0.0f, ic2_ = 0.0f;
 };
 
 } // namespace jamiro

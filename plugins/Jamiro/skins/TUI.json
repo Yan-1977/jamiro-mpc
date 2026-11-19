@@ -3242,16 +3242,16 @@
                     "font": {
                       "version": 1,
                       "name": "Titillium Web",
-                      "style": "Regular",
-                      "height": 22.0
+                      "style": "Bold",
+                      "height": 19.0
                     },
-                    "colour": "ffffe9a6",
+                    "colour": "ffe8102e",
                     "justification": "horizontallyCentred verticallyCentred",
                     "case": "Original"
                   },
                   "type": "Text",
                   "handleName": "Data",
-                  "text": "Mono"
+                  "text": "MONO"
                 }
               },
               "handle remapping": {
@@ -3280,16 +3280,16 @@
                     "font": {
                       "version": 1,
                       "name": "Titillium Web",
-                      "style": "Regular",
-                      "height": 22.0
+                      "style": "Bold",
+                      "height": 19.0
                     },
-                    "colour": "ffffe9a6",
+                    "colour": "ffe8102e",
                     "justification": "horizontallyCentred verticallyCentred",
                     "case": "Original"
                   },
                   "type": "Text",
                   "handleName": "Data",
-                  "text": "Mono AG"
+                  "text": "M.AG"
                 }
               },
               "handle remapping": {
@@ -3318,16 +3318,16 @@
                     "font": {
                       "version": 1,
                       "name": "Titillium Web",
-                      "style": "Regular",
-                      "height": 22.0
+                      "style": "Bold",
+                      "height": 19.0
                     },
-                    "colour": "ffffe9a6",
+                    "colour": "ffe8102e",
                     "justification": "horizontallyCentred verticallyCentred",
                     "case": "Original"
                   },
                   "type": "Text",
                   "handleName": "Data",
-                  "text": "Poly 1"
+                  "text": "POLY1"
                 }
               },
               "handle remapping": {
@@ -3356,16 +3356,16 @@
                     "font": {
                       "version": 1,
                       "name": "Titillium Web",
-                      "style": "Regular",
-                      "height": 22.0
+                      "style": "Bold",
+                      "height": 19.0
                     },
-                    "colour": "ffffe9a6",
+                    "colour": "ffe8102e",
                     "justification": "horizontallyCentred verticallyCentred",
                     "case": "Original"
                   },
                   "type": "Text",
                   "handleName": "Data",
-                  "text": "Poly 2"
+                  "text": "POLY2"
                 }
               },
               "handle remapping": {
@@ -3833,16 +3833,16 @@
                     "font": {
                       "version": 1,
                       "name": "Titillium Web",
-                      "style": "Regular",
-                      "height": 22.0
+                      "style": "Bold",
+                      "height": 23.0
                     },
-                    "colour": "ffffe9a6",
+                    "colour": "ffe8102e",
                     "justification": "horizontallyCentred verticallyCentred",
                     "case": "Original"
                   },
                   "type": "Text",
                   "handleName": "Data",
-                  "text": "Low Pass"
+                  "text": "LP"
                 }
               },
               "handle remapping": {
@@ -3871,16 +3871,16 @@
                     "font": {
                       "version": 1,
                       "name": "Titillium Web",
-                      "style": "Regular",
-                      "height": 22.0
+                      "style": "Bold",
+                      "height": 23.0
                     },
-                    "colour": "ffffe9a6",
+                    "colour": "ffe8102e",
                     "justification": "horizontallyCentred verticallyCentred",
                     "case": "Original"
                   },
                   "type": "Text",
                   "handleName": "Data",
-                  "text": "Band Pass"
+                  "text": "BP"
                 }
               },
               "handle remapping": {
@@ -3909,16 +3909,16 @@
                     "font": {
                       "version": 1,
                       "name": "Titillium Web",
-                      "style": "Regular",
-                      "height": 22.0
+                      "style": "Bold",
+                      "height": 23.0
                     },
-                    "colour": "ffffe9a6",
+                    "colour": "ffe8102e",
                     "justification": "horizontallyCentred verticallyCentred",
                     "case": "Original"
                   },
                   "type": "Text",
                   "handleName": "Data",
-                  "text": "High Pass"
+                  "text": "HP"
                 }
               },
               "handle remapping": {
@@ -3976,10 +3976,10 @@
                     "font": {
                       "version": 1,
                       "name": "Titillium Web",
-                      "style": "Regular",
-                      "height": 22.0
+                      "style": "Bold",
+                      "height": 23.0
                     },
-                    "colour": "ffffe9a6",
+                    "colour": "ffe8102e",
                     "justification": "horizontallyCentred verticallyCentred",
                     "case": "Original"
                   },
@@ -4014,10 +4014,10 @@
                     "font": {
                       "version": 1,
                       "name": "Titillium Web",
-                      "style": "Regular",
-                      "height": 22.0
+                      "style": "Bold",
+                      "height": 23.0
                     },
-                    "colour": "ffffe9a6",
+                    "colour": "ffe8102e",
                     "justification": "horizontallyCentred verticallyCentred",
                     "case": "Original"
                   },
@@ -4959,16 +4959,16 @@
                     "font": {
                       "version": 1,
                       "name": "Titillium Web",
-                      "style": "Regular",
-                      "height": 22.0
+                      "style": "Bold",
+                      "height": 23.0
                     },
-                    "colour": "ffffe9a6",
+                    "colour": "ffe8102e",
                     "justification": "horizontallyCentred verticallyCentred",
                     "case": "Original"
                   },
                   "type": "Text",
                   "handleName": "Data",
-                  "text": "Chorus"
+                  "text": "CHORUS"
                 }
               },
               "handle remapping": {
@@ -4997,16 +4997,16 @@
                     "font": {
                       "version": 1,
                       "name": "Titillium Web",
-                      "style": "Regular",
-                      "height": 22.0
+                      "style": "Bold",
+                      "height": 23.0
                     },
-                    "colour": "ffffe9a6",
+                    "colour": "ffe8102e",
                     "justification": "horizontallyCentred verticallyCentred",
                     "case": "Original"
                   },
                   "type": "Text",
                   "handleName": "Data",
-                  "text": "Phaser"
+                  "text": "PHASER"
                 }
               },
               "handle remapping": {

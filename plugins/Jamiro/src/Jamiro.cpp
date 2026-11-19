@@ -258,19 +258,19 @@ public:
         program("Init Program", {});
         program("Jamiro Saw Lead", {{kVoiceMode, 1}, {kUnison, 3}, {kUniDetune, 30}, {kPorta, 40},
                                     {kO2Lvl, 100}, {kO2Cent, 9}, {kCutoff, 88}, {kReso, 30}, {kFEnv, 20}, {kMDec, 60},
-                                    {kARel, 50}, {kChSend, 40}, {kDlSend, 30}, {kDlSync, 9}});
+                                    {kARel, 50}, {kChSend, 40}, {kDlSend, 30}, {kDlSync, 9}, {kVolume, -1}});
         program("Jamiro Sub Bass", {{kVoiceMode, 0}, {kO1Wave, kPulse}, {kO2Wave, kSine}, {kO2Oct, -1}, {kO2Lvl, 110},
                                     {kCutoff, 50}, {kReso, 25}, {kFEnv, 30}, {kMDec, 45}, {kADec, 70}, {kASus, 110}, {kARel, 20}, {kVolume, 0}});
         program("Jamiro Warm Pad", {{kUnison, 2}, {kUniDetune, 35}, {kO1Pw, 40}, {kO1PwLfo, 20}, {kO2Lvl, 90}, {kO2Oct, 1}, {kO2Cent, -7},
                                     {kCutoff, 70}, {kFEnv, 12}, {kMAtk, 80}, {kMDec, 100}, {kMSus, 60},
-                                    {kAAtk, 75}, {kADec, 90}, {kARel, 95}, {kL2Speed, 40}, {kChSend, 70}, {kRvSend, 60}, {kRvDecay, 90}});
+                                    {kAAtk, 75}, {kADec, 90}, {kARel, 95}, {kL2Speed, 40}, {kChSend, 70}, {kRvSend, 60}, {kRvDecay, 90}, {kVolume, -3}});
         program("Jamiro Funk Clav", {{kO1Wave, kFirstTable + 7}, {kCutoff, 62}, {kReso, 55}, {kFEnv, 34}, {kMDec, 40}, {kMVel, 30},
                                      {kADec, 72}, {kASus, 0}, {kARel, 25}, {kAVel, 40}, {kDist, 20}, {kVolume, 2}});
         program("Jamiro Arp Pulse", {{kO1Wave, kPulse}, {kO1PwLfo, 30}, {kCutoff, 60}, {kReso, 70}, {kFEnv, 28}, {kMDec, 50},
                                      {kADec, 60}, {kASus, 0}, {kARel, 30}, {kArpOn, 1}, {kArpMode, 2}, {kArpOct, 2},
                                      {kDlSend, 45}, {kDlSync, 9}, {kDlFb, 55}, {kVolume, 2}});
         program("Jamiro FM Bell", {{kO2Wave, kSine}, {kO3Wave, kSine}, {kO1Lvl, 0}, {kO3Lvl, 120}, {kO2Oct, 1}, {kO2Semi, 7},
-                                   {kFmLvl, 30}, {kFmEnv, 40}, {kFmDec, 85}, {kADec, 105}, {kASus, 0}, {kARel, 90}, {kRvSend, 50}});
+                                   {kFmLvl, 30}, {kFmEnv, 40}, {kFmDec, 85}, {kADec, 105}, {kASus, 0}, {kARel, 90}, {kRvSend, 50}, {kVolume, -2}});
         for (ksimport::ImportedProgram& p : ksimport::importAll(defaults))
             addProgram(p.name.c_str(), std::move(p.values));
 
@@ -291,6 +291,7 @@ public:
         chorus_.prepare(sampleRate);
         delay_.prepare(sampleRate);
         reverb_.prepare(sampleRate);
+        limiter_.prepare(sampleRate);
         volume_.setTime(20.0f, sampleRate);
         volume_.snap(dbToGain(get(kVolume)));
     }
@@ -307,7 +308,7 @@ public:
         monoCount_ = 0; lastNote_ = -1;
         arpClear(); arpHeldCount_ = 0; arpKeysDown_ = 0;
         controllers_.reset();
-        eq_.reset(); chorus_.reset(); delay_.reset(); reverb_.reset();
+        eq_.reset(); eqR_.reset(); chorus_.reset(); delay_.reset(); reverb_.reset(); limiter_.reset();
         panPhase_ = 0.0f; globalLfoPhase_[0] = globalLfoPhase_[1] = 0.0f;
         volume_.snap(dbToGain(get(kVolume)));
     }
@@ -320,10 +321,10 @@ public:
         for (int e = 0; e < ctx.numMidiEvents; ++e)
         {
             const mpc::MidiEvent& ev = ctx.midi[e];
-            if (ev.sampleOffset > pos) { render(ctx.outputs[0], pos, ev.sampleOffset); pos = ev.sampleOffset; }
+            if (ev.sampleOffset > pos) { render(ctx.outputs[0], ctx.outputs[1], pos, ev.sampleOffset); pos = ev.sampleOffset; }
             handleMidi(ev);
         }
-        render(ctx.outputs[0], pos, ctx.numFrames);
+        render(ctx.outputs[0], ctx.outputs[1], pos, ctx.numFrames);
 
         applyEffects(ctx);
     }
@@ -342,15 +343,16 @@ private:
         float drift = 0.0f, driftTarget = 0.0f;
         int driftCount = 0, ctr = 0;
         Osc osc[3];
-        ADSR amp, mod;
+        Env amp, mod;
         ADEnv fm;
-        SVF f1, f2;
+        ResoSVF f1, f2;
         VoiceLfo lfo[2];
         float lfoVal[2] = {0.0f, 0.0f}, lfoFade[2] = {1.0f, 1.0f};
         Xorshift32 rng;
         // control-rate results
         float pw[3] = {0.0f, 0.0f, 0.0f}, lvl[3] = {0.0f, 0.0f, 0.0f};
         float fmIndex = 0.0f, ampVel = 1.0f, modVel = 1.0f, inGain = 1.0f, bpGain = 1.0f;
+        float gL = 1.0f, gR = 1.0f;   // unison level compensation + stereo spread
     };
 
     // Per-block snapshot of everything the audio code needs.
@@ -363,7 +365,7 @@ private:
         float semi[3] = {0, 0, 0}, lfoSemis[3] = {0, 0, 0}, envSemis[3] = {0, 0, 0};
         float pwPos[3] = {0, 0, 0}, pwLfo[3] = {0, 0, 0}, pwEnv[3] = {0, 0, 0};
         float lvl[3] = {1, 0, 0}, noise = 0, ring = 0, fmLvl = 0, fmEnv = 0;
-        float cutoffOct = 9.9f, reso = 0, drive = 1, qnorm = 0, keyTrack = 0, fEnvOct = 0, fLfoOct = 0;
+        float cutoffOct = 9.9f, reso = 0, qnorm = 0, keyTrack = 0, fEnvOct = 0, fLfoOct = 0;
         float aVel = 0, mVel = 0;
         float lfoCycles[2] = {0, 0}, lfoFadeStep[2] = {1, 1};
         float mwVibSemis = 0, atVibSemis = 0, mwFiltOct = 0, mwFLfoOct = 0, atFiltOct = 0;
@@ -411,8 +413,8 @@ private:
         s.ftype = getInt(kFType);
         s.slope = getInt(kFSlope);
         s.cutoffOct = cutoffOct(get(kCutoff));
-        s.reso = get(kReso) / 127.0f * 0.985f;
-        s.drive = 1.0f + get(kDrive) / 127.0f * 9.0f;
+        s.reso = get(kReso) / 127.0f;
+        overdrive_.set(get(kDrive));
         s.qnorm = get(kQNorm) / 127.0f;
         s.keyTrack = get(kKeyTrack) / 127.0f;
         s.fEnvOct = get(kFEnv) / 64.0f * 8.0f;
@@ -445,8 +447,8 @@ private:
             globalLfoPhase_[l] = wrapPhase(globalLfoPhase_[l] + hz / sr_ * (float)ctx.numFrames);
         }
 
-        s.mwVibSemis = pitchDepthSemis(get(kMwVib));
-        s.atVibSemis = pitchDepthSemis(get(kAtVib));
+        s.mwVibSemis = 0.5f * pitchDepthSemis(get(kMwVib));   // wheel / aftertouch vibrato: finer scale
+        s.atVibSemis = 0.5f * pitchDepthSemis(get(kAtVib));
         s.mwFiltOct = get(kMwFilt) / 64.0f * 5.0f;
         s.mwFLfoOct = get(kMwFLfo) / 64.0f * 5.0f;
         s.atFiltOct = get(kAtFilt) / 64.0f * 5.0f;
@@ -461,8 +463,8 @@ private:
         if (arpWasOn && !s.arpOn) { arpReleaseSounding(); arpHeldCount_ = 0; arpKeysDown_ = 0; }
         if (!s.arpLatch && arpKeysDown_ == 0 && arpHeldCount_ > 0) { arpHeldCount_ = 0; arpReleaseSounding(); }
 
-        const float aa = envTimeMs(get(kAAtk)), ad = envTimeMs(get(kADec)) * 2.0f, as = get(kASus) / 127.0f, ar = envTimeMs(get(kARel)) * 2.0f;
-        const float ma = envTimeMs(get(kMAtk)), md = envTimeMs(get(kMDec)) * 2.0f, ms = get(kMSus) / 127.0f, mr = envTimeMs(get(kMRel)) * 2.0f;
+        const float aa = envAttackMs(get(kAAtk)), ad = envTauMs(get(kADec)), as = get(kASus) / 127.0f, ar = envTauMs(get(kARel));
+        const float ma = envAttackMs(get(kMAtk)), md = envTauMs(get(kMDec)), ms = get(kMSus) / 127.0f, mr = envTauMs(get(kMRel));
         const float fa = envTimeMs(get(kFmAtk)), fd = envTimeMs(get(kFmDec)) * 2.0f;
         for (Voice& v : voices_)
         {
@@ -475,6 +477,7 @@ private:
         s.mixGain = dbToGain(get(kMixLevel) * 0.5f);
         s.dist = get(kDist) / 127.0f;
         eq_.set(get(kEqLevel), get(kEqFreq), sr_);
+        eqR_.set(get(kEqLevel), get(kEqFreq), sr_);
         chorus_.set(getInt(kChType), get(kChSend), get(kChRate), get(kChDepth), get(kChFb));
         float dlMs = 5.0f + get(kDlTime) * 5.3f;
         const int dlSync = getInt(kDlSync);
@@ -614,7 +617,7 @@ private:
             if (s_.mode == 1 && s_.portaCoef >= 1.0f) v.pitch = (float)note;   // Mono AG with no glide time
             if (s_.portaCoef >= 1.0f && s_.mode == 0) v.pitch = (float)note;
             v.gate = true; v.sustained = false;
-            if (s_.mode == 0) { v.amp.noteOn(); v.mod.noteOn(); v.fm.trigger(); }   // Mono re-triggers, Mono AG does not
+            if (s_.mode == 0) { v.amp.noteOn(); v.mod.noteOn(); v.fm.trigger(); restartColour(v); }   // Mono re-triggers, Mono AG does not
         }
         lastNote_ = note;
     }
@@ -643,9 +646,19 @@ private:
         else if (glideFrom < 0) v.pitch = (float)note;
         v.ampVel = velocityGain(s_.aVel, v.vel);
         v.modVel = velocityGain(s_.mVel, v.vel);
+        {
+            // Unison: keep the total level steady (1/sqrt(U)) and spread the voices across
+            // the stereo field (outer voices at +-60 %), equal-power.
+            const float spread = U > 1 ? ((float)k / (float)(U - 1) * 2.0f - 1.0f) * 0.6f : 0.0f;
+            const float ang = (spread + 1.0f) * 0.25f * kPi;
+            const float g = 1.0f / std::sqrt((float)U);
+            v.gL = std::cos(ang) * kSqrt2 * g; v.gR = std::sin(ang) * kSqrt2 * g;
+        }
         if (!wasActive)
         {
-            for (int o = 0; o < 3; ++o) { v.osc[o].phase = o == 0 ? 0.0f : v.rng.nextFloat(); v.osc[o].n1 = v.osc[o].n2 = 0.0f; }
+            // Unison voices start at random phases: in-phase copies would add up to a sudden
+            // level jump (and clipping) instead of a wide, chorused sound.
+            for (int o = 0; o < 3; ++o) { v.osc[o].phase = (o == 0 && U == 1) ? 0.0f : v.rng.nextFloat(); v.osc[o].n1 = v.osc[o].n2 = 0.0f; }
             v.f1.reset(); v.f2.reset();
             v.driftTarget = v.rng.nextBipolar() * s_.drift;
         }
@@ -656,8 +669,14 @@ private:
             else if (!wasActive) v.lfo[l].restart(globalLfoPhase_[l]);
             v.lfoFade[l] = s_.lfoFadeStep[l] >= 1.0f ? 1.0f : 0.0f;
         }
-        if (trigger) { v.amp.noteOn(); v.mod.noteOn(); v.fm.trigger(); }
+        if (trigger) { v.amp.noteOn(); v.mod.noteOn(); v.fm.trigger(); restartColour(v); }
         v.ctr = 0;
+    }
+
+    // Table waves start bright (harder playing = brighter) and fade to their body.
+    static void restartColour(Voice& v)
+    {
+        for (int o = 0; o < 3; ++o) v.osc[o].bright = 0.35f + 0.65f * v.vel;
     }
 
     void releaseVoice(Voice& v)
@@ -757,7 +776,7 @@ private:
     }
 
     // ------------------------------------------------------------------ rendering
-    void render(float* out, int from, int to)
+    void render(float* outL, float* outR, int from, int to)
     {
         while (from < to)
         {
@@ -772,7 +791,7 @@ private:
             {
                 Voice& v = voices_[vi];
                 if (!v.active) continue;
-                renderVoice(v, out + from, n);
+                renderVoice(v, outL + from, outR + from, n);
             }
             arpAdvance(n);
             from += n;
@@ -809,6 +828,11 @@ private:
             float inc = 440.0f * std::exp2((semis - 69.0f) * (1.0f / 12.0f)) / sr_;
             v.osc[o].inc = inc > 0.45f ? 0.45f : inc;
             v.osc[o].tableLevel = WaveTables::levelFor(v.osc[o].inc);
+            if (s.wave[o] >= kFirstTable && v.osc[o].bright > 0.001f)
+            {
+                const float secs = WaveTables::fadeSeconds(s.wave[o] - kFirstTable) * std::exp2((60.0f - v.pitch) / 24.0f);
+                v.osc[o].bright *= std::exp(-(float)kCtrl / (secs * sr_));
+            }
             v.pw[o] = clamp(s.pwPos[o] + l2 * s.pwLfo[o] + menv * s.pwEnv[o], -1.0f, 1.0f);
         }
         v.fmIndex = s.fmLvl + s.fmEnv * fmEnv;
@@ -820,16 +844,21 @@ private:
                   + wheel * (s.mwFiltOct + l2 * s.mwFLfoOct) + at * s.atFiltOct + s.fVelOct * v.vel;
         oct = clamp(oct, 0.0f, 10.2f);
         const float hz = 20.0f * std::exp2(oct);
-        v.f1.set(hz, s.reso);
-        if (s.slope == 1) v.f2.set(hz, s.reso * 0.6f);
-        v.f1.setDrive(s.drive);
+        // Damping: 12 dB = one stage from Butterworth (1.414) down past zero (self-oscillation);
+        // 24 dB = Butterworth pair, the second stage carrying the resonance.
+        const float rc = std::pow(s.reso, 0.75f);
+        float k1, k2 = 2.0f;
+        if (s.slope == 1) { k1 = 1.848f; k2 = 0.765f - (0.765f + 0.12f) * rc; }
+        else              { k1 = 1.414f - (1.414f + 0.12f) * rc; }
+        v.f1.set(hz, k1);
+        if (s.slope == 1) v.f2.set(hz, k2);
         // Band pass: scale by 1/Q so the peak sits at unity gain, like the other modes.
-        v.bpGain = s.ftype == 1 ? (2.0f - 1.98f * s.reso) * (s.slope == 1 ? (2.0f - 1.98f * s.reso * 0.6f) : 1.0f) : 1.0f;
+        v.bpGain = s.ftype == 1 ? std::fmax(k1, 0.08f) * (s.slope == 1 ? std::fmax(k2, 0.08f) : 1.0f) : 1.0f;
         // Q normalise: pull the level down as resonance rises (classic ladder feel).
         v.inGain = 1.0f - 0.6f * s.qnorm * s.reso;
     }
 
-    void renderVoice(Voice& v, float* out, int n)
+    void renderVoice(Voice& v, float* outL, float* outR, int n)
     {
         const Settings& s = s_;
         const WaveTables& tables = WaveTables::instance();
@@ -838,7 +867,7 @@ private:
         const bool need1 = s.lvl[1] > 0.0f || s.l2o2 != 0.0f || s.ring > 0.0f || fmOn;
         const bool need2 = s.lvl[2] > 0.0f || s.ado3 != 0.0f;
         const bool noise = s.noise > 0.0f;
-        const SVF::Mode mode = s.ftype == 1 ? SVF::Mode::Bandpass : (s.ftype == 2 ? SVF::Mode::Highpass : SVF::Mode::Lowpass);
+        const int mode = clamp(s.ftype, 0, 2);
         const bool two = s.slope == 1;
         constexpr float kVoiceGain = 0.28f;
 
@@ -859,28 +888,20 @@ private:
 
             float mix = a * v.lvl[0] + b * v.lvl[1] + c * v.lvl[2] + a * b * s.ring;
             if (noise) mix += v.rng.nextBipolar() * s.noise;
-            mix *= v.inGain;
+            mix = overdrive_.process(mix * v.inGain);
 
             float y = v.f1.process(mix, mode);
             if (two) y = v.f2.process(y, mode);
             y *= v.bpGain;
 
-            const float amp = v.amp.process() * v.ampVel;
-            out[i] += y * amp * kVoiceGain;
+            const float out = y * v.amp.process() * v.ampVel * kVoiceGain;
+            outL[i] += out * v.gL;
+            outR[i] += out * v.gR;
         }
         if (!v.amp.isActive()) { v.active = false; v.gate = false; v.sustained = false; }
     }
 
     // ------------------------------------------------------------------ effects
-    // Transparent below -3 dBFS, then a soft knee that never exceeds 0 dBFS.
-    static float softLimit(float x)
-    {
-        const float a = std::fabs(x);
-        if (a <= 0.7f) return x;
-        const float y = 0.7f + 0.3f * fastTanh((a - 0.7f) / 0.3f);
-        return x < 0.0f ? -y : y;
-    }
-
     void applyEffects(mpc::ProcessContext& ctx)
     {
         float* L = ctx.outputs[0];
@@ -898,16 +919,18 @@ private:
                 const float ang = (p + 1.0f) * 0.25f * kPi;
                 gl = std::cos(ang) * kSqrt2; gr = std::sin(ang) * kSqrt2;
             }
-            float x = L[i] * s.mixGain;
-            if (s.dist > 0.0f) x = fastTanh(x * drive) * distComp;
-            x = eq_.process(x);
-            float l = x * gl, r = x * gr;
+            float l = L[i] * s.mixGain, r = (R ? R[i] : L[i]) * s.mixGain;
+            if (s.dist > 0.0f) { l = fastTanh(l * drive) * distComp; r = fastTanh(r * drive) * distComp; }
+            l = eq_.process(l) * gl;
+            r = eqR_.process(r) * gr;
             if (chorus_.active()) chorus_.process(l, r);
             delay_.process(l, r);
             reverb_.process(l, r);
             const float g = volume_.process();
-            L[i] = sanitize(softLimit(l * g));
-            if (R) R[i] = sanitize(softLimit(r * g));
+            l = sanitize(l * g); r = sanitize(r * g);
+            limiter_.process(l, r);
+            L[i] = flushDenormal(l);
+            if (R) R[i] = flushDenormal(r);
         }
     }
 
@@ -921,10 +944,12 @@ private:
     Xorshift32 arpRng_{0x2545F491u};
 
     MidiControllers controllers_;
-    TiltEQ eq_;
+    TiltEQ eq_, eqR_;
     ChorusPhaser chorus_;
     StereoDelay delay_;
     Reverb reverb_;
+    PeakLimiter limiter_;
+    Overdrive overdrive_;
     Smoother volume_;
     float sr_ = 44100.0f, panPhase_ = 0.0f, globalLfoPhase_[2] = {0.0f, 0.0f};
 };

@@ -24,6 +24,14 @@ PROJECT = os.path.dirname(HERE)
 SDK = os.path.dirname(os.path.dirname(PROJECT))
 COLOUR = "ff5848ad"
 ROW_Y = (45, 196, 346, 497)   # top of each control row in the generated 4 x 4 grid
+CAPTION_RED = "ffe8102e"
+# Short captions that fit inside the segment buttons (the full names stay in the value text).
+SHORT_CAPTIONS = {
+    "Filter Type": ["LP", "BP", "HP"],
+    "Slope": ["12 dB", "24 dB"],
+    "Voice Mode": ["MONO", "M.AG", "POLY1", "POLY2"],
+    "Chorus Type": ["CHORUS", "PHASER"],
+}
 
 
 def main():
@@ -49,6 +57,19 @@ def main():
     with open(tui_path, encoding="utf-8") as f:
         tui = json.load(f)
     for tab in tui["pageData"]["tabs"]:
+        # Segment-switch captions (the yellow boxes): bold red, short text, readable on the
+        # gold "selected" segment and on the dark ones.
+        for c in tab["componentDefinition"]["componentsData"]:
+            cd = c["componentData"]
+            if cd["type"] == "Label" and " seg " in cd["name"]:
+                param, _, idx = cd["name"].rpartition(" seg ")
+                ts = cd["data"]["textStyle"]
+                ts["colour"] = CAPTION_RED
+                ts["font"]["style"] = "Bold"
+                ts["font"]["height"] = 19.0 if param == "Voice Mode" else 23.0   # 4 narrow segments
+                short = SHORT_CAPTIONS.get(param)
+                if short and idx.isdigit() and int(idx) < len(short):
+                    cd["data"]["text"] = short[int(idx)]
         bd = tab["componentDefinition"]["backgroundData"]
         for state in ("focussed", "unfocussed"):
             bd[state] = {"version": 1, "colour": COLOUR, "image": image}

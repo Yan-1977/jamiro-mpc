@@ -99,6 +99,12 @@ A French README is in `plugins/Jamiro/README.md`.
 
 ## Changes
 
+- **1.0.3**: unison no longer crackles (steady level, random start phases, stereo spread);
+  transparent look-ahead output limiter (no distortion at high Mix Level / Volume); table waves
+  now move from a bright attack to a rounder body (velocity sensitive); new filter with proper
+  24 dB Butterworth slope and resonance that self-oscillates at maximum; overdrive keeps a steady
+  level; analog-style envelopes with longer, more musical decay/release; finer mod wheel /
+  aftertouch vibrato; red, short captions in the switch boxes (LP/BP/HP, 12/24 dB, voice mode).
 - **1.0.2**: rebuilt the 9 table waveforms (Organ, Harpsichord, E.Piano, Slap Bass, Rhodes,
   Rhodes Tine, Wurly, Clavinet, Ana Bass) with richer spectra, one band-limited version per
   octave (no more sudden dulling above middle C) and matched loudness; preset levels rebalanced.
