@@ -23,6 +23,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT = os.path.dirname(HERE)
 SDK = os.path.dirname(os.path.dirname(PROJECT))
 COLOUR = "ff5848ad"
+ROW_Y = (45, 196, 346, 497)   # top of each control row in the generated 4 x 4 grid
 
 
 def main():
@@ -51,8 +52,20 @@ def main():
         bd = tab["componentDefinition"]["backgroundData"]
         for state in ("focussed", "unfocussed"):
             bd[state] = {"version": 1, "colour": COLOUR, "image": image}
+        # Q-Link groups are ROWS: the focus rectangle wraps one row of four controls.
+        tab["qlinkBoundsData"] = ["13 %d 1254 121" % (y - 7) for y in ROW_Y]
     with open(tui_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(tui, f, indent=2)
+
+    # Bank the knobs by rows, top row first: on a 4-knob MPC the knobs, left to right,
+    # drive one on-screen row (e.g. Cutoff, Resonance, Overdrive, Key Track).
+    q_path = os.path.join(skins, "Q-Links.json")
+    with open(q_path, encoding="utf-8") as f:
+        ql = json.load(f)
+    for entry in ql["Screen Mode Q-Links"]["map"]:
+        entry["Bank Direction"] = "RowTopDown"
+    with open(q_path, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(ql, f, indent=2)
     print("skin written to", skins, "background:", image or "none")
 
 

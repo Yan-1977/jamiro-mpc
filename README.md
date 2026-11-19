@@ -97,6 +97,15 @@ The source is commented: start with `plugins/Jamiro/src/Jamiro.cpp` (signal flow
 `jamiro_dsp.h` (oscillators, LFOs, effects) and `ks_import.h` (the `.syx` reader).
 A French README is in `plugins/Jamiro/README.md`.
 
+## Changes
+
+- **1.0.2**: rebuilt the 9 table waveforms (Organ, Harpsichord, E.Piano, Slap Bass, Rhodes,
+  Rhodes Tine, Wurly, Clavinet, Ana Bass) with richer spectra, one band-limited version per
+  octave (no more sudden dulling above middle C) and matched loudness; preset levels rebalanced.
+  Q-Links now bank by rows: on 4-knob MPCs the knobs, left to right, drive one row of the screen.
+- **1.0.1**: neon light-beam skin background.
+- **1.0.0**: first release.
+
 ## Licence
 
 MIT, see `LICENSE`. The reverb is a classic Schroeder/Moorer network.

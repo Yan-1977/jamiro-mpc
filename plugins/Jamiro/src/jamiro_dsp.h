@@ -99,23 +99,35 @@ inline std::vector<std::string> arpRateNames()
 
 // ---------------------------------------------------------------------------
 // Sampled-style waveforms (Organ, E.Piano ...). We build our own single-cycle
-// tables by additive synthesis, at 4 band-limit levels so high notes do not alias.
+// tables by additive synthesis (no samples are used). There is one band-limited
+// version per octave, each keeping every harmonic below ~0.45 x sample rate, so the
+// tone stays bright up the keyboard without aliasing. Harmonic phases are spread
+// (not all sines in phase) and every table is scaled to the same loudness.
 // ---------------------------------------------------------------------------
 class WaveTables
 {
 public:
-    static constexpr int kSize = 1024;
+    static constexpr int kSize = 2048;
     static constexpr int kTables = 9;
-    static constexpr int kLevels = 4;
+    static constexpr int kLevels = 10;       // one per octave, from 27.5 Hz (A0) up
+    static constexpr int kMaxHarmonics = 160;
 
     // Build once (call from the plugin constructor, never from the audio thread).
     static const WaveTables& instance() { static WaveTables t; return t; }
 
-    // phase 0..1, table 0..8, inc = cycles per sample (selects the band-limit level)
-    float read(int table, float phase, float inc) const
+    // Band-limit level for a phase increment (cycles per sample). Cheap: call at control rate.
+    static int levelFor(float inc)
     {
-        int level = inc < 0.007f ? 0 : inc < 0.028f ? 1 : inc < 0.075f ? 2 : 3;
-        const float* t = data_[clamp(table, 0, kTables - 1)][level];
+        float top = kBaseInc;
+        for (int lv = 0; lv < kLevels - 1; ++lv, top *= 2.0f)
+            if (inc <= top) return lv;
+        return kLevels - 1;
+    }
+
+    // phase 0..1, table 0..8, level from levelFor()
+    float read(int table, float phase, int level) const
+    {
+        const float* t = data_[clamp(table, 0, kTables - 1)][clamp(level, 0, kLevels - 1)];
         const float pos = phase * (float)kSize;
         int i = (int)pos;
         if (i >= kSize) i = kSize - 1;
@@ -124,60 +136,84 @@ public:
     }
 
 private:
+    // Highest fundamental of level 0 is 27.5 Hz at 44.1 kHz; each level doubles it.
+    static constexpr float kBaseInc = 27.5f / 44100.0f;
+
     WaveTables()
     {
-        static const int kMaxH[kLevels] = { 64, 16, 6, 2 };
+        std::vector<double> acc((size_t)kSize + 1);
         for (int tb = 0; tb < kTables; ++tb)
+        {
+            float gain = 1.0f;
             for (int lv = 0; lv < kLevels; ++lv)
             {
-                float* t = data_[tb][lv];
-                for (int i = 0; i <= kSize; ++i) t[i] = 0.0f;
-                for (int n = 1; n <= kMaxH[lv]; ++n)
+                const double topInc = (double)kBaseInc * std::pow(2.0, lv);
+                int maxH = (int)(0.45 / topInc);
+                if (maxH > kMaxHarmonics) maxH = kMaxHarmonics;
+                if (maxH < 1) maxH = 1;
+                std::fill(acc.begin(), acc.end(), 0.0);
+                for (int n = 1; n <= maxH; ++n)
                 {
-                    const float a = amp(tb, n);
-                    if (a == 0.0f) continue;
+                    const double a = amp(tb, n);
+                    if (a == 0.0) continue;
+                    // Fixed, spread phases: same timbre, lower peaks than all-sine-phase.
+                    const double ph = n == 1 ? 0.0 : (double)kTwoPi * std::fmod(0.6180339887 * n * n, 1.0);
                     for (int i = 0; i <= kSize; ++i)
-                        t[i] += a * std::sin(kTwoPi * (float)n * (float)i / (float)kSize);
+                        acc[(size_t)i] += a * std::sin((double)kTwoPi * (double)n * (double)i / (double)kSize + ph);
                 }
-                float peak = 1e-6f;
-                for (int i = 0; i <= kSize; ++i) peak = std::fmax(peak, std::fabs(t[i]));
-                for (int i = 0; i <= kSize; ++i) t[i] /= peak;
+                if (lv == 0)
+                {
+                    // Loudness: RMS 0.58 (same as a full-scale saw), peaks kept below 1.
+                    double rms = 0.0, peak = 1e-9;
+                    for (int i = 0; i < kSize; ++i) { rms += acc[(size_t)i] * acc[(size_t)i]; peak = std::fmax(peak, std::fabs(acc[(size_t)i])); }
+                    rms = std::sqrt(rms / kSize);
+                    gain = (float)std::fmin(0.58 / std::fmax(rms, 1e-9), 0.98 / peak);
+                }
+                float* t = data_[tb][lv];
+                for (int i = 0; i <= kSize; ++i) t[i] = clamp((float)acc[(size_t)i] * gain, -1.0f, 1.0f);
             }
+        }
     }
 
     // Harmonic recipes (original, by ear): amplitude of harmonic n for each table.
-    static float amp(int table, int n)
+    static double amp(int table, int n)
     {
-        const float fn = (float)n;
+        const double fn = (double)n;
+        const double pi = (double)kPi;
         switch (table)
         {
-            case 0: // Organ (drawbar-like)
-                switch (n) { case 1: return 1.0f; case 2: return 0.7f; case 3: return 0.5f; case 4: return 0.45f;
-                             case 6: return 0.3f; case 8: return 0.35f; case 10: return 0.15f; case 12: return 0.12f;
-                             case 16: return 0.1f; default: return 0.0f; }
-            case 1: // Harpsichord (bright, plucked near the end of the string)
-                return n <= 48 ? (0.4f + 0.6f * std::fabs(std::sin(kPi * fn * 0.13f))) / std::pow(fn, 0.6f) : 0.0f;
-            case 2: // E.Piano
-                switch (n) { case 1: return 1.0f; case 2: return 0.45f; case 3: return 0.12f; case 4: return 0.08f;
-                             case 5: return 0.05f; case 7: return 0.18f; case 8: return 0.08f; default: return 0.0f; }
-            case 3: // Slap bass
-                return n <= 32 ? ((n >= 3 && n <= 6) ? 1.8f : 1.0f) / std::pow(fn, 1.05f) : 0.0f;
-            case 4: // Rhodes
-                switch (n) { case 1: return 1.0f; case 2: return 0.25f; case 3: return 0.07f; case 4: return 0.05f;
-                             case 6: return 0.06f; default: return 0.0f; }
-            case 5: // Rhodes tine (bell partials)
-                switch (n) { case 1: return 1.0f; case 2: return 0.15f; case 5: return 0.12f; case 7: return 0.35f;
-                             case 9: return 0.1f; case 14: return 0.12f; default: return 0.0f; }
-            case 6: // Wurly (reedy)
-                switch (n) { case 1: return 1.0f; case 2: return 0.35f; case 3: return 0.55f; case 4: return 0.2f;
-                             case 5: return 0.3f; case 6: return 0.1f; case 7: return 0.12f; case 9: return 0.06f;
-                             default: return 0.0f; }
-            case 7: // Clavinet (narrow-pulse-like)
-                return n <= 40 ? std::fabs(std::sin(kPi * fn * 0.12f)) / std::pow(fn, 0.8f) : 0.0f;
-            case 8: // Analog bass (soft saw)
-                return 1.0f / (fn * (1.0f + (fn / 5.0f) * (fn / 5.0f)));
+            case 0: // Organ: drawbars 8, 4, 2 2/3, 2, 1 3/5, 1 1/3 and 1 foot plus a little bite
+                switch (n) { case 1: return 1.0; case 2: return 0.8; case 3: return 0.6; case 4: return 0.55;
+                             case 5: return 0.15; case 6: return 0.35; case 8: return 0.3; case 10: return 0.1;
+                             case 12: return 0.12; case 16: return 0.08; default: return 0.0; }
+            case 1: // Harpsichord: bright string plucked close to its end
+                return n <= 96 ? (0.25 + 0.75 * std::fabs(std::sin(pi * fn * 0.11))) / std::pow(fn, 0.7) : 0.0;
+            case 2: // E.Piano: FM-style tine piano, warm body plus a metallic top
+                switch (n) { case 1: return 1.0; case 2: return 0.6; case 3: return 0.25; case 4: return 0.18;
+                             case 5: return 0.1; case 6: return 0.08; case 7: return 0.22; case 8: return 0.18;
+                             case 9: return 0.12; case 10: return 0.06; case 13: return 0.05; case 14: return 0.08;
+                             case 15: return 0.06; default: return 0.0; }
+            case 3: // Slap bass: string pop around harmonics 3-8
+                return n <= 64 ? ((n >= 3 && n <= 8) ? 1.6 : 1.0) * (n > 20 ? 0.6 : 1.0) / std::pow(fn, 0.85) : 0.0;
+            case 4: // Rhodes: round fundamental with the bark of the upper partials
+                switch (n) { case 1: return 1.0; case 2: return 0.55; case 3: return 0.3; case 4: return 0.2;
+                             case 5: return 0.12; case 6: return 0.1; case 7: return 0.07; case 8: return 0.05;
+                             case 9: return 0.04; case 10: return 0.03; default: return 0.0; }
+            case 5: // Rhodes tine: bell-like
+                switch (n) { case 1: return 1.0; case 2: return 0.35; case 3: return 0.12; case 4: return 0.3;
+                             case 6: return 0.12; case 7: return 0.45; case 9: return 0.15; case 11: return 0.12;
+                             case 14: return 0.25; case 17: return 0.08; case 21: return 0.06; default: return 0.0; }
+            case 6: // Wurly: reedy, strong odd harmonics
+                switch (n) { case 1: return 1.0; case 2: return 0.45; case 3: return 0.75; case 4: return 0.3;
+                             case 5: return 0.55; case 6: return 0.2; case 7: return 0.4; case 8: return 0.12;
+                             case 9: return 0.28; case 10: return 0.08; case 11: return 0.18; case 13: return 0.12;
+                             case 15: return 0.08; default: return 0.0; }
+            case 7: // Clavinet: thin, nasal pickup-comb spectrum
+                return n <= 120 ? std::pow(std::fabs(std::sin(pi * fn * 0.09)), 0.8) / std::pow(fn, 0.75) : 0.0;
+            case 8: // Analog bass: soft saw with a resonant bump
+                return n <= 96 ? ((n >= 3 && n <= 5) ? 1.5 : 1.0) / (fn * (1.0 + (fn / 12.0) * (fn / 12.0))) : 0.0;
         }
-        return 0.0f;
+        return 0.0;
     }
 
     float data_[kTables][kLevels][kSize + 1];
@@ -204,6 +240,7 @@ struct Osc
 {
     float phase = 0.0f, inc = 0.0f;
     float n1 = 0.0f, n2 = 0.0f;   // noise filter states
+    int tableLevel = 0;           // band-limit level for the table waves (set with inc)
     bool wrapped = false;
 
     // Advance one sample. Returns true if the phase wrapped (for hard sync).
@@ -242,7 +279,7 @@ struct Osc
             case kHPNoise: { const float x = rng.nextBipolar(); n1 += 0.15f * (x - n1); return (x - n1) * 1.2f; }
             case kBPNoise: { const float x = rng.nextBipolar(); n1 += 0.25f * (x - n1); n2 += 0.05f * (n1 - n2); return (n1 - n2) * 3.0f; }
             case kHBPNoise:{ const float x = rng.nextBipolar(); n1 += 0.6f * (x - n1); n2 += 0.25f * (n1 - n2); return (n1 - n2) * 2.0f; }
-            default: return tables.read(wave - kFirstTable, t, dt);
+            default: return tables.read(wave - kFirstTable, t, tableLevel);
         }
     }
 };

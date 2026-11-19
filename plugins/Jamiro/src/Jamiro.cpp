@@ -260,7 +260,7 @@ public:
                                     {kO2Lvl, 100}, {kO2Cent, 9}, {kCutoff, 88}, {kReso, 30}, {kFEnv, 20}, {kMDec, 60},
                                     {kARel, 50}, {kChSend, 40}, {kDlSend, 30}, {kDlSync, 9}});
         program("Jamiro Sub Bass", {{kVoiceMode, 0}, {kO1Wave, kPulse}, {kO2Wave, kSine}, {kO2Oct, -1}, {kO2Lvl, 110},
-                                    {kCutoff, 50}, {kReso, 25}, {kFEnv, 30}, {kMDec, 45}, {kADec, 70}, {kASus, 110}, {kARel, 20}});
+                                    {kCutoff, 50}, {kReso, 25}, {kFEnv, 30}, {kMDec, 45}, {kADec, 70}, {kASus, 110}, {kARel, 20}, {kVolume, 0}});
         program("Jamiro Warm Pad", {{kUnison, 2}, {kUniDetune, 35}, {kO1Pw, 40}, {kO1PwLfo, 20}, {kO2Lvl, 90}, {kO2Oct, 1}, {kO2Cent, -7},
                                     {kCutoff, 70}, {kFEnv, 12}, {kMAtk, 80}, {kMDec, 100}, {kMSus, 60},
                                     {kAAtk, 75}, {kADec, 90}, {kARel, 95}, {kL2Speed, 40}, {kChSend, 70}, {kRvSend, 60}, {kRvDecay, 90}});
@@ -268,7 +268,7 @@ public:
                                      {kADec, 72}, {kASus, 0}, {kARel, 25}, {kAVel, 40}, {kDist, 20}, {kVolume, 2}});
         program("Jamiro Arp Pulse", {{kO1Wave, kPulse}, {kO1PwLfo, 30}, {kCutoff, 60}, {kReso, 70}, {kFEnv, 28}, {kMDec, 50},
                                      {kADec, 60}, {kASus, 0}, {kARel, 30}, {kArpOn, 1}, {kArpMode, 2}, {kArpOct, 2},
-                                     {kDlSend, 45}, {kDlSync, 9}, {kDlFb, 55}});
+                                     {kDlSend, 45}, {kDlSync, 9}, {kDlFb, 55}, {kVolume, 2}});
         program("Jamiro FM Bell", {{kO2Wave, kSine}, {kO3Wave, kSine}, {kO1Lvl, 0}, {kO3Lvl, 120}, {kO2Oct, 1}, {kO2Semi, 7},
                                    {kFmLvl, 30}, {kFmEnv, 40}, {kFmDec, 85}, {kADec, 105}, {kASus, 0}, {kARel, 90}, {kRvSend, 50}});
         for (ksimport::ImportedProgram& p : ksimport::importAll(defaults))
@@ -808,6 +808,7 @@ private:
             const float semis = base + s.semi[o] + l1 * s.lfoSemis[o] + menv * s.envSemis[o] + vib;
             float inc = 440.0f * std::exp2((semis - 69.0f) * (1.0f / 12.0f)) / sr_;
             v.osc[o].inc = inc > 0.45f ? 0.45f : inc;
+            v.osc[o].tableLevel = WaveTables::levelFor(v.osc[o].inc);
             v.pw[o] = clamp(s.pwPos[o] + l2 * s.pwLfo[o] + menv * s.pwEnv[o], -1.0f, 1.0f);
         }
         v.fmIndex = s.fmLvl + s.fmEnv * fmEnv;
