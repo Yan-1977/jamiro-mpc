@@ -81,7 +81,8 @@ python tools/package.py plugins/Jamiro
 ```
 
 After editing `ui.json`, run `python plugins/Jamiro/tools/make_skin.py` (it regenerates `skins/`
-with the background image), then build again.
+with the background image), then build again. `tools/make_captions.py` (needs Pillow) redraws the
+switch-box caption images in `art/captions/` if you change the captions.
 
 Releases are built by GitHub Actions with OpenMPC's release workflow (`.github/workflows/release.yml`).
 
@@ -99,6 +100,10 @@ A French README is in `plugins/Jamiro/README.md`.
 
 ## Changes
 
+- **1.0.4**: screen design: switch boxes now show their captions in red (MONO / M.AG /
+  POLY1 / POLY2, LP / BP / HP, 12 / 24 dB, CHORUS / PHASER), drawn into the button images so the
+  MPC always shows them; menu controls (waves, sync, arp mode/rate...) are boxes with readable
+  name and value text.
 - **1.0.3**: unison no longer crackles (steady level, random start phases, stereo spread);
   transparent look-ahead output limiter (no distortion at high Mix Level / Volume); table waves
   now move from a bright attack to a rounder body (velocity sensitive); new filter with proper

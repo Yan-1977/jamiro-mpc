@@ -24,7 +24,6 @@ PROJECT = os.path.dirname(HERE)
 SDK = os.path.dirname(os.path.dirname(PROJECT))
 COLOUR = "ff5848ad"
 ROW_Y = (45, 196, 346, 497)   # top of each control row in the generated 4 x 4 grid
-CAPTION_RED = "ffe8102e"
 # Short captions that fit inside the segment buttons (the full names stay in the value text).
 SHORT_CAPTIONS = {
     "Filter Type": ["LP", "BP", "HP"],
@@ -32,6 +31,30 @@ SHORT_CAPTIONS = {
     "Voice Mode": ["MONO", "M.AG", "POLY1", "POLY2"],
     "Chorus Type": ["CHORUS", "PHASER"],
 }
+
+
+def caption_key(param):
+    return param.lower().replace(" ", "_")
+
+
+NAME_COLOUR = "ffc9f3ff"    # same as the knob names
+VALUE_COLOUR = "ffffe9a6"   # same as the knob values
+
+
+def _entry(name, typ, data, bounds):
+    return {"version": 2,
+            "componentData": {"version": 1, "name": name, "type": typ, "data": data},
+            "handle remapping": {"version": 1, "map": []},
+            "bounds": {"version": 1, "acceptsHWFocus": "No", "showWhenDataModelInvalid": "Show",
+                       "whenVisible": "Always", "boundsType": "Absolute", "bounds": bounds}}
+
+
+def _label_entry(name, kind, colour, height, bounds):
+    return _entry(name, "Label", {"version": 1,
+                                  "textStyle": {"version": 1,
+                                                "font": {"version": 1, "name": "Titillium Web", "style": "Regular", "height": height},
+                                                "colour": colour, "justification": "left", "case": "Original"},
+                                  "type": kind, "handleName": "Data"}, bounds)
 
 
 def main():
@@ -56,20 +79,58 @@ def main():
     tui_path = os.path.join(skins, "TUI.json")
     with open(tui_path, encoding="utf-8") as f:
         tui = json.load(f)
+    # Menu controls (LFO wave, sync, arp mode/rate ...): the MPC's generic bar draws its
+    # text in a fixed dark colour that disappears on the violet background. Replace it with
+    # a box (dark panel whose fill shows the position) and our own name / value labels.
+    for d in tui["pageData"]["componentDefinitions"]["localComponentDefinitions"]:
+        if d["key"] not in ("sliderWithFocus", "sliderWithFocusMenu"):
+            continue
+        kids = d["value"]["componentsData"]
+        old = [c for c in kids if c["componentData"]["type"] == "Slider"]
+        if not old:
+            continue
+        i = kids.index(old[0])
+        kids[i:i + 1] = [
+            _entry("box", "Slider", {"version": 2, "sliderType": "ColourBar", "direction": "Horizontal",
+                                     "backgroundColour": "e0221a52", "outlineColour": "ffb9b0ff",
+                                     "valueColour": "e0453a9c", "isBipolar": False, "handleName": "Data"},
+                   "10 6 258 95"),
+            _label_entry("name", "Name", NAME_COLOUR, 24.0, "22 10 240 32"),
+            _label_entry("value", "Value", VALUE_COLOUR, 31.0, "22 44 240 44"),
+        ]
+
+    # Switch boxes: draw the captions INTO the button images (art/captions, made by
+    # make_captions.py). Text labels laid over the buttons are not drawn by the MPC.
+    defs = {d["key"]: d for d in tui["pageData"]["componentDefinitions"]["localComponentDefinitions"]}
+    cap_dir = os.path.join(PROJECT, "art", "captions")
+    captioned = set()
+    for param, labels in SHORT_CAPTIONS.items():
+        files = [("%s_%d_on.png" % (caption_key(param), i), "%s_%d_off.png" % (caption_key(param), i)) for i in range(len(labels))]
+        base_key = "radio%d" % len(labels)
+        if base_key not in defs or not all(os.path.exists(os.path.join(cap_dir, f)) for pair in files for f in pair):
+            continue
+        clone = json.loads(json.dumps(defs[base_key]))
+        clone["key"] = "radio_" + caption_key(param)
+        for c in clone["value"]["componentsData"]:
+            data = c["componentData"]["data"]
+            if c["componentData"]["type"] == "Button":
+                on, off = files[data["buttonId"]]
+                data["onImage"], data["offImage"] = on, off
+        for pair in files:
+            for f in pair:
+                shutil.copy(os.path.join(cap_dir, f), os.path.join(skins, f))
+        tui["pageData"]["componentDefinitions"]["localComponentDefinitions"].append(clone)
+        captioned.add(param)
+
     for tab in tui["pageData"]["tabs"]:
-        # Segment-switch captions (the yellow boxes): bold red, short text, readable on the
-        # gold "selected" segment and on the dark ones.
-        for c in tab["componentDefinition"]["componentsData"]:
+        kids = tab["componentDefinition"]["componentsData"]
+        for c in kids:
             cd = c["componentData"]
-            if cd["type"] == "Label" and " seg " in cd["name"]:
-                param, _, idx = cd["name"].rpartition(" seg ")
-                ts = cd["data"]["textStyle"]
-                ts["colour"] = CAPTION_RED
-                ts["font"]["style"] = "Bold"
-                ts["font"]["height"] = 19.0 if param == "Voice Mode" else 23.0   # 4 narrow segments
-                short = SHORT_CAPTIONS.get(param)
-                if short and idx.isdigit() and int(idx) < len(short):
-                    cd["data"]["text"] = short[int(idx)]
+            if cd["name"] in captioned and cd["type"].startswith("radio"):
+                cd["type"] = "radio_" + caption_key(cd["name"])
+        # drop the old overlay captions of switches whose images now carry the text
+        kids[:] = [c for c in kids if not (c["componentData"]["type"] == "Label" and " seg " in c["componentData"]["name"]
+                                          and c["componentData"]["name"].rpartition(" seg ")[0] in captioned)]
         bd = tab["componentDefinition"]["backgroundData"]
         for state in ("focussed", "unfocussed"):
             bd[state] = {"version": 1, "colour": COLOUR, "image": image}
