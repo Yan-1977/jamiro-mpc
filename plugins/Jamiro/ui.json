@@ -1,114 +1,529 @@
 {
-  "kit": { "theme": "violet", "accent": "ffffd25a" },
-  "style": { "background": "ff5848ad", "accent": "ffffd25a", "text": "ffffe9a6", "muted": "ffc9f3ff" },
+  "kit": {
+    "theme": "violet",
+    "accent": "ffffd25a"
+  },
+  "style": {
+    "background": "ff5848ad",
+    "accent": "ffffd25a",
+    "text": "ffffe9a6",
+    "muted": "ffc9f3ff"
+  },
   "pages": [
-    { "name": "OSC 1-2", "controls": [
-      { "param": "O1 Wave", "widget": "slider", "overlay": "menu" },
-      { "param": "O1 Octave", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O1 Semi", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O1 Cent", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O1 PW", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O1 PW LFO2", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O1 LFO1", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O1 ModEnv", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O2 Wave", "widget": "slider", "overlay": "menu" },
-      { "param": "O2 Octave", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O2 Semi", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O2 Cent", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O2 PW", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O2 PW LFO2", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O2 LFO1", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O2 ModEnv", "widget": "knob", "polarity": "bipolar" }
-    ] },
-    { "name": "OSC 3", "controls": [
-      { "param": "O3 Wave", "widget": "slider", "overlay": "menu" },
-      { "param": "O3 Octave", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O3 Semi", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O3 Cent", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O3 PW", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O3 PW LFO2", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O3 LFO1", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O3 ModEnv", "widget": "knob", "polarity": "bipolar" },
-      { "param": "FM 2>3 Lvl", "widget": "knob" },
-      { "param": "FM Env Amt", "widget": "knob", "polarity": "bipolar" },
-      { "param": "FM Attack", "widget": "fader" },
-      { "param": "FM Decay", "widget": "fader" },
-      { "param": "O1 PW Env", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O2 PW Env", "widget": "knob", "polarity": "bipolar" },
-      { "param": "O3 PW Env", "widget": "knob", "polarity": "bipolar" },
-      { "param": "Osc Sync", "widget": "switch" }
-    ] },
-    { "name": "MIXER", "controls": [
-      { "param": "Osc1 Level", "widget": "fader" },
-      { "param": "Osc2 Level", "widget": "fader" },
-      { "param": "Osc3 Level", "widget": "fader" },
-      { "param": "Noise Level", "widget": "fader" },
-      { "param": "Ring Level", "widget": "fader" },
-      { "param": "Mix Level", "widget": "fader" },
-      { "param": "Volume", "widget": "fader" },
-      { "param": "Pan", "widget": "knob", "polarity": "bipolar" },
-      { "param": "Voice Mode", "widget": "switch" },
-      { "param": "Unison", "widget": "knob" },
-      { "param": "Uni Detune", "widget": "knob" },
-      { "param": "Portamento", "widget": "knob" },
-      { "param": "MW Vibrato", "widget": "knob", "polarity": "bipolar" },
-      { "param": "MW Filter", "widget": "knob", "polarity": "bipolar" },
-      { "param": "AT Filter", "widget": "knob", "polarity": "bipolar" },
-      { "param": "Bend Range", "widget": "knob" }
-    ] },
-    { "name": "FILT/ENV", "controls": [
-      { "param": "Cutoff", "widget": "knob" },
-      { "param": "Resonance", "widget": "knob" },
-      { "param": "Overdrive", "widget": "knob" },
-      { "param": "Key Track", "widget": "knob" },
-      { "param": "Filt Env", "widget": "knob", "polarity": "bipolar" },
-      { "param": "Filt LFO2", "widget": "knob", "polarity": "bipolar" },
-      { "param": "Filter Type", "widget": "switch" },
-      { "param": "Slope", "widget": "switch" },
-      { "param": "Mod Attack", "widget": "fader" },
-      { "param": "Mod Decay", "widget": "fader" },
-      { "param": "Mod Sustain", "widget": "fader" },
-      { "param": "Mod Release", "widget": "fader" },
-      { "param": "Amp Attack", "widget": "fader" },
-      { "param": "Amp Decay", "widget": "fader" },
-      { "param": "Amp Sustain", "widget": "fader" },
-      { "param": "Amp Release", "widget": "fader" }
-    ] },
-    { "name": "LFO/ARP", "controls": [
-      { "param": "LFO1 Wave", "widget": "slider", "overlay": "menu" },
-      { "param": "LFO1 Speed", "widget": "knob" },
-      { "param": "LFO1 Delay", "widget": "knob" },
-      { "param": "LFO1 Sync", "widget": "slider", "overlay": "menu" },
-      { "param": "LFO2 Wave", "widget": "slider", "overlay": "menu" },
-      { "param": "LFO2 Speed", "widget": "knob" },
-      { "param": "LFO2 Delay", "widget": "knob" },
-      { "param": "LFO2 Sync", "widget": "slider", "overlay": "menu" },
-      { "param": "Arp On", "widget": "switch" },
-      { "param": "Arp Mode", "widget": "slider", "overlay": "menu" },
-      { "param": "Arp Rate", "widget": "slider", "overlay": "menu" },
-      { "param": "Arp Octaves", "widget": "knob" },
-      { "param": "Arp Gate", "widget": "knob" },
-      { "param": "Arp Latch", "widget": "switch" },
-      { "param": "Amp Velo", "widget": "knob", "polarity": "bipolar" },
-      { "param": "Mod Velo", "widget": "knob", "polarity": "bipolar" }
-    ] },
-    { "name": "FX", "controls": [
-      { "param": "Chorus Mix", "widget": "fader" },
-      { "param": "Delay Send", "widget": "fader" },
-      { "param": "Reverb Send", "widget": "fader" },
-      { "param": "Distortion", "widget": "fader" },
-      { "param": "Chorus Type", "widget": "switch" },
-      { "param": "Chorus Rate", "widget": "knob" },
-      { "param": "Chorus Depth", "widget": "knob" },
-      { "param": "Chorus Fdbk", "widget": "knob", "polarity": "bipolar" },
-      { "param": "Delay Time", "widget": "knob" },
-      { "param": "Delay Sync", "widget": "slider", "overlay": "menu" },
-      { "param": "Delay Fdbk", "widget": "knob" },
-      { "param": "Delay Width", "widget": "knob" },
-      { "param": "Reverb Type", "widget": "slider", "overlay": "menu" },
-      { "param": "Reverb Decay", "widget": "knob" },
-      { "param": "EQ Tilt", "widget": "knob", "polarity": "bipolar" },
-      { "param": "EQ Freq", "widget": "knob" }
-    ] }
+    {
+      "name": "OSC 1-2",
+      "controls": [
+        {
+          "param": "O1 Wave",
+          "widget": "slider",
+          "overlay": "menu"
+        },
+        {
+          "param": "O1 Octave",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O1 Semi",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O1 Cent",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O1 PW",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O1 PW LFO2",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O1 LFO1",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O1 ModEnv",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O2 Wave",
+          "widget": "slider",
+          "overlay": "menu"
+        },
+        {
+          "param": "O2 Octave",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O2 Semi",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O2 Cent",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O2 PW",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O2 PW LFO2",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O2 LFO1",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O2 ModEnv",
+          "widget": "knob",
+          "polarity": "bipolar"
+        }
+      ]
+    },
+    {
+      "name": "OSC 3",
+      "controls": [
+        {
+          "param": "O3 Wave",
+          "widget": "slider",
+          "overlay": "menu"
+        },
+        {
+          "param": "O3 Octave",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O3 Semi",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O3 Cent",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O3 PW",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O3 PW LFO2",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O3 LFO1",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O3 ModEnv",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "FM 2>3 Lvl",
+          "widget": "knob"
+        },
+        {
+          "param": "FM Env Amt",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "FM Attack",
+          "widget": "fader"
+        },
+        {
+          "param": "FM Decay",
+          "widget": "fader"
+        },
+        {
+          "param": "O1 PW Env",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O2 PW Env",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "O3 PW Env",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "Osc Sync",
+          "widget": "switch"
+        }
+      ]
+    },
+    {
+      "name": "MIXER",
+      "controls": [
+        {
+          "param": "Osc1 Level",
+          "widget": "fader"
+        },
+        {
+          "param": "Osc2 Level",
+          "widget": "fader"
+        },
+        {
+          "param": "Osc3 Level",
+          "widget": "fader"
+        },
+        {
+          "param": "Noise Level",
+          "widget": "fader"
+        },
+        {
+          "param": "Ring Level",
+          "widget": "fader"
+        },
+        {
+          "param": "Mix Level",
+          "widget": "fader"
+        },
+        {
+          "param": "Volume",
+          "widget": "fader"
+        },
+        {
+          "param": "Pan",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "Voice Mode",
+          "widget": "switch"
+        },
+        {
+          "param": "Unison",
+          "widget": "knob"
+        },
+        {
+          "param": "Uni Detune",
+          "widget": "knob"
+        },
+        {
+          "param": "Portamento",
+          "widget": "knob"
+        },
+        {
+          "param": "MW Vibrato",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "MW Filter",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "AT Filter",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "Bend Range",
+          "widget": "knob"
+        }
+      ]
+    },
+    {
+      "name": "FILT/ENV",
+      "controls": [
+        {
+          "param": "Cutoff",
+          "widget": "knob"
+        },
+        {
+          "param": "Resonance",
+          "widget": "knob"
+        },
+        {
+          "param": "Overdrive",
+          "widget": "knob"
+        },
+        {
+          "param": "Key Track",
+          "widget": "knob"
+        },
+        {
+          "param": "Filt Env",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "Filt LFO2",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "Filter Type",
+          "widget": "switch"
+        },
+        {
+          "param": "Slope",
+          "widget": "switch"
+        },
+        {
+          "param": "Mod Attack",
+          "widget": "fader"
+        },
+        {
+          "param": "Mod Decay",
+          "widget": "fader"
+        },
+        {
+          "param": "Mod Sustain",
+          "widget": "fader"
+        },
+        {
+          "param": "Mod Release",
+          "widget": "fader"
+        },
+        {
+          "param": "Amp Attack",
+          "widget": "fader"
+        },
+        {
+          "param": "Amp Decay",
+          "widget": "fader"
+        },
+        {
+          "param": "Amp Sustain",
+          "widget": "fader"
+        },
+        {
+          "param": "Amp Release",
+          "widget": "fader"
+        }
+      ]
+    },
+    {
+      "name": "LFO/ARP",
+      "controls": [
+        {
+          "param": "LFO1 Wave",
+          "widget": "slider",
+          "overlay": "menu"
+        },
+        {
+          "param": "LFO1 Speed",
+          "widget": "knob"
+        },
+        {
+          "param": "LFO1 Delay",
+          "widget": "knob"
+        },
+        {
+          "param": "LFO1 Sync",
+          "widget": "slider",
+          "overlay": "menu"
+        },
+        {
+          "param": "LFO2 Wave",
+          "widget": "slider",
+          "overlay": "menu"
+        },
+        {
+          "param": "LFO2 Speed",
+          "widget": "knob"
+        },
+        {
+          "param": "LFO2 Delay",
+          "widget": "knob"
+        },
+        {
+          "param": "LFO2 Sync",
+          "widget": "slider",
+          "overlay": "menu"
+        },
+        {
+          "param": "Arp On",
+          "widget": "switch"
+        },
+        {
+          "param": "Arp Mode",
+          "widget": "slider",
+          "overlay": "menu"
+        },
+        {
+          "param": "Arp Rate",
+          "widget": "slider",
+          "overlay": "menu"
+        },
+        {
+          "param": "Arp Octaves",
+          "widget": "knob"
+        },
+        {
+          "param": "Arp Gate",
+          "widget": "knob"
+        },
+        {
+          "param": "Arp Latch",
+          "widget": "switch"
+        },
+        {
+          "param": "Amp Velo",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "Mod Velo",
+          "widget": "knob",
+          "polarity": "bipolar"
+        }
+      ]
+    },
+    {
+      "name": "FX",
+      "controls": [
+        {
+          "param": "Chorus Mix",
+          "widget": "fader"
+        },
+        {
+          "param": "Delay Send",
+          "widget": "fader"
+        },
+        {
+          "param": "Reverb Send",
+          "widget": "fader"
+        },
+        {
+          "param": "Distortion",
+          "widget": "fader"
+        },
+        {
+          "param": "Chorus Type",
+          "widget": "switch"
+        },
+        {
+          "param": "Chorus Rate",
+          "widget": "knob"
+        },
+        {
+          "param": "Chorus Depth",
+          "widget": "knob"
+        },
+        {
+          "param": "Chorus Fdbk",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "Delay Time",
+          "widget": "knob"
+        },
+        {
+          "param": "Delay Sync",
+          "widget": "slider",
+          "overlay": "menu"
+        },
+        {
+          "param": "Delay Fdbk",
+          "widget": "knob"
+        },
+        {
+          "param": "Delay Width",
+          "widget": "knob"
+        },
+        {
+          "param": "Reverb Type",
+          "widget": "slider",
+          "overlay": "menu"
+        },
+        {
+          "param": "Reverb Decay",
+          "widget": "knob"
+        },
+        {
+          "param": "EQ Tilt",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "EQ Freq",
+          "widget": "knob"
+        }
+      ]
+    },
+    {
+      "name": "LFO MENU",
+      "controls": [
+        {
+          "param": "LFO1 KeySync",
+          "widget": "switch"
+        },
+        {
+          "param": "LFO1 Unipol",
+          "widget": "switch"
+        },
+        {
+          "param": "LFO1 OneShot",
+          "widget": "switch"
+        },
+        {
+          "param": "LFO1 Common",
+          "widget": "switch"
+        },
+        {
+          "param": "LFO2 KeySync",
+          "widget": "switch"
+        },
+        {
+          "param": "LFO2 Unipol",
+          "widget": "switch"
+        },
+        {
+          "param": "LFO2 OneShot",
+          "widget": "switch"
+        },
+        {
+          "param": "LFO2 Common",
+          "widget": "switch"
+        },
+        {
+          "param": "LFO1 Phase",
+          "widget": "knob"
+        },
+        {
+          "param": "LFO1 Velo",
+          "widget": "knob",
+          "polarity": "bipolar"
+        },
+        {
+          "param": "LFO2 Phase",
+          "widget": "knob"
+        },
+        {
+          "param": "LFO2 Velo",
+          "widget": "knob",
+          "polarity": "bipolar"
+        }
+      ]
+    }
   ]
 }

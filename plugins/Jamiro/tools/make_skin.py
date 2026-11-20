@@ -25,11 +25,22 @@ SDK = os.path.dirname(os.path.dirname(PROJECT))
 COLOUR = "ff5848ad"
 ROW_Y = (45, 196, 346, 497)   # top of each control row in the generated 4 x 4 grid
 # Short captions that fit inside the segment buttons (the full names stay in the value text).
+# Pages shown as a second page of another function key: {page: parent page}.
+SUB_PAGES = {"LFO MENU": "LFO/ARP"}
+
 SHORT_CAPTIONS = {
     "Filter Type": ["LP", "BP", "HP"],
     "Slope": ["12 dB", "24 dB"],
     "Voice Mode": ["MONO", "M.AG", "POLY1", "POLY2"],
     "Chorus Type": ["CHORUS", "PHASER"],
+    "LFO1 KeySync": ["OFF", "ON"],
+    "LFO1 Unipol": ["OFF", "ON"],
+    "LFO1 OneShot": ["OFF", "ON"],
+    "LFO1 Common": ["OFF", "ON"],
+    "LFO2 KeySync": ["OFF", "ON"],
+    "LFO2 Unipol": ["OFF", "ON"],
+    "LFO2 OneShot": ["OFF", "ON"],
+    "LFO2 Common": ["OFF", "ON"],
 }
 
 
@@ -126,7 +137,8 @@ def main():
         kids = tab["componentDefinition"]["componentsData"]
         for c in kids:
             cd = c["componentData"]
-            if cd["name"] in captioned and cd["type"].startswith("radio"):
+            # (OFF / ON settings come out of gen_ui as pill toggles: they become captioned boxes too)
+            if cd["name"] in captioned and (cd["type"].startswith("radio") or cd["type"] == "toggle"):
                 cd["type"] = "radio_" + caption_key(cd["name"])
         # drop the old overlay captions of switches whose images now carry the text
         kids[:] = [c for c in kids if not (c["componentData"]["type"] == "Label" and " seg " in c["componentData"]["name"]
@@ -136,6 +148,20 @@ def main():
             bd[state] = {"version": 1, "colour": COLOUR, "image": image}
         # Q-Link groups are ROWS: the focus rectangle wraps one row of four controls.
         tab["qlinkBoundsData"] = ["13 %d 1254 121" % (y - 7) for y in ROW_Y]
+    # Sub-pages: a page listed in SUB_PAGES sits on its parent's function key and is reached
+    # by pressing that key again (the MPC has six function keys).
+    tabs = tui["pageData"]["tabs"]
+    moved = {}   # old Q-Link "Tab" number -> (new Tab, new SubTab)
+    for child, parent in SUB_PAGES.items():
+        c = next((t for t in tabs if t["tabName"] == child), None)
+        par = next((t for t in tabs if t["tabName"] == parent), None)
+        if c is None or par is None:
+            continue
+        subs = [t for t in tabs if t["fnKeyIndex"] == par["fnKeyIndex"] and t is not c]
+        moved[c["fnKeyIndex"] + 1] = (par["fnKeyIndex"] + 1, len(subs) + 1)
+        c["fnKeyIndex"], c["fnKeySubIndex"] = par["fnKeyIndex"], len(subs)
+        tabs.remove(c)
+        tabs.insert(tabs.index(subs[-1]) + 1, c)
     with open(tui_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(tui, f, indent=2)
 
@@ -146,6 +172,8 @@ def main():
         ql = json.load(f)
     for entry in ql["Screen Mode Q-Links"]["map"]:
         entry["Bank Direction"] = "RowTopDown"
+        if entry.get("SubTab") == 1 and entry.get("Tab") in moved:
+            entry["Tab"], entry["SubTab"] = moved[entry["Tab"]]
     with open(q_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(ql, f, indent=2)
     print("skin written to", skins, "background:", image or "none")

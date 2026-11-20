@@ -11,6 +11,7 @@
 #ifndef JAMIRO_DSP_H
 #define JAMIRO_DSP_H
 
+#include "jamiro_lfo_shapes.h"
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -42,7 +43,7 @@ inline float envTimeMs(float v) { return 0.5f * std::pow(40000.0f, clamp(v, 0.0f
 inline float cutoffOct(float v) { return v * (9.9f / 127.0f); }
 
 // LFO speed: 0 -> 0.05 Hz, 68 -> ~5 Hz, 127 -> ~270 Hz (capped at 120 Hz).
-inline float lfoHz(float v) { float hz = 0.05f * std::exp2(clamp(v, 0.0f, 127.0f) * 0.0976f); return hz > 120.0f ? 120.0f : hz; }
+inline float lfoHz(float v) { float hz = 0.0621f * std::exp2(clamp(v, 0.0f, 127.0f) * 0.0976f); return hz > 120.0f ? 120.0f : hz; }
 
 // Bipolar pitch depth (-64..63) -> semitones. 30 = exactly one octave at full LFO
 // swing (that is what the "chromatic" LFO trick relies on), small values give a
@@ -314,45 +315,112 @@ struct Osc
 // ---------------------------------------------------------------------------
 // LFO waveforms (index == "LFO Wave" choice). Evaluated at control rate.
 // ---------------------------------------------------------------------------
-enum LfoWave { kLSine = 0, kLTri, kLSaw, kLSquare, kLSH, kLQuantSH, kLSmooth, kLExpDec, kLExpAtt, kLSteps, kNumLfoWaves };
+// The 32 shapes of the X-Station. The first 10 keep the positions they had in earlier Jamiro
+// versions (so saved sounds keep their LFO); the other 22 follow. Shapes were measured on the
+// hardware (see jamiro_lfo_shapes.h); all are bipolar -1..1, "Unipolar" maps them to 0..1.
+enum LfoWave
+{
+    kLSine = 0, kLTri, kLSaw, kLSquare, kLSH, kLQuantSH, kLCrossfade, kLExpDec1, kLAttExp1, kLChromatic,
+    kLExpDec2, kLExpDec3, kLAttExp2, kLAttExp3, kLSustExp1, kLSustExp2, kLSustExp3,
+    kLPiano1, kLPiano2, kLPiano3, kLExpUpDown, kLMajModes, kLMajor7,
+    kLPattern1, kLPattern2, kLPattern3, kLPattern4, kLPattern5, kLPattern6, kLPattern7, kLPattern8, kLPattern9,
+    kNumLfoWaves
+};
 
 inline std::vector<std::string> lfoWaveNames()
 {
-    return { "Sine", "Triangle", "Saw", "Square", "Random S/H", "Quant S/H", "Crossfade", "Exp Decay", "Exp Attack", "Scale Steps" };
+    return { "Sine", "Triangle", "Saw", "Square", "Random S/H", "Quant S/H", "Crossfade", "Exp Dec 1", "Att Exp 1", "Chromatic",
+             "Exp Dec 2", "Exp Dec 3", "Att Exp 2", "Att Exp 3", "Sust Exp 1", "Sust Exp 2", "Sust Exp 3",
+             "Piano Env 1", "Piano Env 2", "Piano Env 3", "Exp Up Down", "Maj-Modes", "Major-7",
+             "Pattern 1", "Pattern 2", "Pattern 3", "Pattern 4", "Pattern 5", "Pattern 6", "Pattern 7", "Pattern 8", "Pattern 9" };
+}
+
+// X-Station LFO number (0..31, the order of its manual) -> Jamiro LFO wave.
+inline int lfoFromXStation(int x)
+{
+    static const int kMap[32] = { kLSine, kLTri, kLSaw, kLSquare, kLSH, kLQuantSH, kLCrossfade,
+                                  kLExpDec1, kLExpDec2, kLExpDec3, kLAttExp1, kLAttExp2, kLAttExp3,
+                                  kLSustExp1, kLSustExp2, kLSustExp3, kLPiano1, kLPiano2, kLPiano3, kLExpUpDown,
+                                  kLChromatic, kLMajModes, kLMajor7,
+                                  kLPattern1, kLPattern2, kLPattern3, kLPattern4, kLPattern5, kLPattern6, kLPattern7, kLPattern8, kLPattern9 };
+    return kMap[clamp(x, 0, 31)];
 }
 
 struct VoiceLfo
 {
-    float phase = 0.0f, held = 0.0f, prevHeld = 0.0f, value = 0.0f;
+    float phase = 0.0f, held = 0.0f, heldBin = 1.0f, value = 0.0f;
+    bool done = false;   // one-shot finished
 
-    // Advance by `cycles` and return the new value (-1..1, Scale Steps is 0..1).
-    float tick(int wave, float cycles, mpc::dsp::Xorshift32& rng)
+    // Row of kLfoShapes for the measured smooth shapes, -1 for the others.
+    static int measuredRow(int wave)
     {
-        phase += cycles;
+        switch (wave)
+        {
+            case kLCrossfade: return 0; case kLExpDec1: return 1; case kLExpDec2: return 2; case kLExpDec3: return 3;
+            case kLAttExp1: return 4; case kLAttExp2: return 5; case kLAttExp3: return 6;
+            case kLSustExp1: return 7; case kLSustExp2: return 8; case kLSustExp3: return 9;
+            case kLPiano1: return 10; case kLPiano2: return 11; case kLPiano3: return 12; case kLExpUpDown: return 13;
+            default: return -1;
+        }
+    }
+
+    // Unipolar value 0..1 of the stepped / table shapes at phase t.
+    static float shapeUni(int wave, float t)
+    {
+        const int row = measuredRow(wave);
+        if (row >= 0)
+        {
+            const float x = t * (float)kLfoShapePoints;
+            int i = (int)x; const float f = x - (float)i;
+            i = clamp(i, 0, kLfoShapePoints - 1);
+            const int j = i + 1 < kLfoShapePoints ? i + 1 : 0;
+            return kLfoShapes[row][i] + (kLfoShapes[row][j] - kLfoShapes[row][i]) * f;
+        }
+        switch (wave)
+        {
+            case kLChromatic: return std::floor(t * 12.0f) * (1.0f / 12.0f);      // 0..11 semitones at depth 30
+            case kLMajModes: { static const float k[8] = {0, 2, 4, 5, 7, 9, 11, 12}; return k[clamp((int)(t * 8.0f), 0, 7)] / 12.0f; }
+            case kLMajor7:   { static const float k[4] = {0, 4, 7, 11}; return k[clamp((int)(t * 4.0f), 0, 3)] / 12.0f; }
+            case kLPattern1: { static const float k[4] = {0, 3, 7, 11}; return k[clamp((int)(t * 4.0f), 0, 3)] / 12.0f; }
+            default:
+            {
+                // Patterns 2-9: 16-step rhythms between the note (0) and its octave (1) at depth 30.
+                static const char* kRhythm[8] = { "XXXX....XX..XX..", "XX..XX..XXXX....", "XXXXXX..XX.XX.X.", "XX.XX.X.XXXXXX..",
+                                                  "XXXXXXXX..XXXXX.", "X.X.X.X.XXX.XXX.", "X.X.XX.XXXXXXXX.", "XXX.XXX.X..X..X." };
+                const int pat = clamp(wave - kLPattern2, 0, 7);
+                return kRhythm[pat][clamp((int)(t * 16.0f), 0, 15)] == 'X' ? 1.0f : 0.0f;
+            }
+        }
+    }
+
+    // Advance by `cycles` and return the new value (-1..1).
+    float tick(int wave, float cycles, bool oneShot, mpc::dsp::Xorshift32& rng)
+    {
+        if (!done) phase += cycles;
         if (phase >= 1.0f)
         {
-            phase -= std::floor(phase);
-            prevHeld = held;
-            held = rng.nextBipolar();
+            if (oneShot) { phase = 0.99999f; done = true; }
+            else
+            {
+                phase -= std::floor(phase);
+                held = rng.nextBipolar();
+                heldBin = rng.nextBipolar() >= 0.0f ? 1.0f : -1.0f;
+            }
         }
         const float t = phase;
         switch (wave)
         {
-            case kLSine:    value = mpc::dsp::WavetableSine::lookup(t); break;
-            case kLTri:     value = t < 0.25f ? 4.0f * t : (t < 0.75f ? 2.0f - 4.0f * t : 4.0f * t - 4.0f); break;   // starts at 0, rising
-            case kLSaw:     value = 2.0f * t - 1.0f; break;
+            case kLSine:    value = mpc::dsp::WavetableSine::lookup(t); break;          // starts in the middle, rising
+            case kLTri:     value = t < 0.5f ? 4.0f * t - 1.0f : 3.0f - 4.0f * t; break; // starts at the bottom, rising
+            case kLSaw:     value = 1.0f - 2.0f * t; break;                              // falling, as on the X-Station
             case kLSquare:  value = t < 0.5f ? 1.0f : -1.0f; break;
             case kLSH:      value = held; break;
-            case kLQuantSH: value = std::floor(held * 4.0f + 0.5f) * 0.25f; break;
-            case kLSmooth:  value = prevHeld + (held - prevHeld) * t; break;
-            case kLExpDec:  value = 2.0f * std::exp(-5.0f * t) - 1.0f; break;
-            case kLExpAtt:  value = 1.0f - 2.0f * std::exp(-5.0f * t); break;
-            case kLSteps:   value = std::floor(t * 12.0f) * (1.0f / 12.0f); break;   // rising chromatic scale
-            default:        value = 0.0f; break;
+            case kLQuantSH: value = heldBin; break;                                      // random top or bottom each cycle
+            default:        value = 2.0f * shapeUni(wave, t) - 1.0f; break;
         }
         return value;
     }
-    void restart(float ph) { phase = ph; }
+    void restart(float ph) { phase = wrapPhase(ph); done = false; }
 };
 
 // Attack / decay envelope (drives the FM amount).

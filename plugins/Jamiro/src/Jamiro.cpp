@@ -95,11 +95,22 @@ enum Param
     kFiltVel,     // velocity -> cutoff
     kL1Uni,       // LFO1 unipolar (0..+1 instead of -1..+1)
     kL2Uni,       // LFO2 unipolar
+    kL1OneShot,   // LFO1 plays its shape once per note (an extra envelope)
+    kL2OneShot,
+    kL1Common,    // LFO1 shared by all voices (X-Station "Common" / lock)
+    kL2Common,
+    kL1Phase,     // LFO1 start point when KeySync restarts it (0..127 = 0..360 degrees)
+    kL2Phase,
+    kL1Velo,      // velocity -> LFO1 amount (-64..63)
+    kL2Velo,
 
     kNumParams
 };
 
 constexpr int kOscStride = kO2Wave - kO1Wave;
+// Two-state settings shown as OFF / ON boxes on the screen (same 0 / 1 values as a switch).
+inline std::vector<std::string> offOn() { return {"OFF", "ON"}; }
+
 enum OscField { fWave, fOct, fSemi, fCent, fLfo, fEnv, fPw, fPwLfo, fPwEnv };
 
 } // namespace
@@ -194,12 +205,12 @@ public:
         addParam(u7("l1speed", "LFO1 Speed", 68.0f));
         addParam(u7("l1delay", "LFO1 Delay", 0.0f));
         addParam(choiceParam("l1sync", "LFO1 Sync", lfoSyncNames(), 0));
-        addParam(boolParam("l1key", "LFO1 KeySync", false));
+        addParam(choiceParam("l1key", "LFO1 KeySync", offOn(), 0));
         addParam(choiceParam("l2wave", "LFO2 Wave", lfoWaveNames(), kLTri));
         addParam(u7("l2speed", "LFO2 Speed", 68.0f));
         addParam(u7("l2delay", "LFO2 Delay", 0.0f));
         addParam(choiceParam("l2sync", "LFO2 Sync", lfoSyncNames(), 0));
-        addParam(boolParam("l2key", "LFO2 KeySync", false));
+        addParam(choiceParam("l2key", "LFO2 KeySync", offOn(), 0));
 
         addParam(bip("mwvib", "MW Vibrato", 10.0f));
         addParam(bip("mwfilt", "MW Filter", 0.0f));
@@ -240,8 +251,16 @@ public:
         addParam(bip("mixl2o2", "LFO2>O2 Lvl", 0.0f));
         addParam(bip("mixado3", "FMEnv>O3 Lvl", 0.0f));
         addParam(bip("fvel", "Filt Velo", 0.0f));
-        addParam(boolParam("l1uni", "LFO1 Unipol", false));
-        addParam(boolParam("l2uni", "LFO2 Unipol", false));
+        addParam(choiceParam("l1uni", "LFO1 Unipol", offOn(), 0));
+        addParam(choiceParam("l2uni", "LFO2 Unipol", offOn(), 0));
+        addParam(choiceParam("l1oneshot", "LFO1 OneShot", offOn(), 0));
+        addParam(choiceParam("l2oneshot", "LFO2 OneShot", offOn(), 0));
+        addParam(choiceParam("l1common", "LFO1 Common", offOn(), 0));
+        addParam(choiceParam("l2common", "LFO2 Common", offOn(), 0));
+        addParam(u7("l1phase", "LFO1 Phase", 0.0f));
+        addParam(u7("l2phase", "LFO2 Phase", 0.0f));
+        addParam(bip("l1velo", "LFO1 Velo", 0.0f));
+        addParam(bip("l2velo", "LFO2 Velo", 0.0f));
 
         if (numParams() != kNumParams) mpc::log("Jamiro: parameter count mismatch (%d vs %d)", numParams(), (int)kNumParams);
 
@@ -348,7 +367,7 @@ private:
         ADEnv fm;
         ResoSVF f1, f2;
         VoiceLfo lfo[2];
-        float lfoVal[2] = {0.0f, 0.0f}, lfoFade[2] = {1.0f, 1.0f};
+        float lfoVal[2] = {0.0f, 0.0f}, lfoFade[2] = {1.0f, 1.0f}, lfoVel[2] = {1.0f, 1.0f};
         Xorshift32 rng;
         // control-rate results
         float pw[3] = {0.0f, 0.0f, 0.0f}, lvl[3] = {0.0f, 0.0f, 0.0f};
@@ -375,7 +394,8 @@ private:
         int arpRate = 3;
         float mixGain = 1.0f, dist = 0.0f, pan = 0.0f, panDepth = 0.0f, panInc = 0.0f;
         float l1o1 = 0, l2o1 = 0, l2o2 = 0, ado3 = 0, fVelOct = 0;
-        bool uni[2] = {false, false};
+        bool uni[2] = {false, false}, oneShot[2] = {false, false}, common[2] = {false, false};
+        float lfoPhase[2] = {0, 0}, lfoVelo[2] = {0, 0};
     } s_;
 
     // ------------------------------------------------------------------ settings
@@ -431,6 +451,10 @@ private:
         s.fVelOct = get(kFiltVel) / 64.0f * 3.0f;
         s.uni[0] = getBool(kL1Uni);
         s.uni[1] = getBool(kL2Uni);
+        s.oneShot[0] = getBool(kL1OneShot); s.oneShot[1] = getBool(kL2OneShot);
+        s.common[0] = getBool(kL1Common); s.common[1] = getBool(kL2Common);
+        s.lfoPhase[0] = get(kL1Phase) / 128.0f; s.lfoPhase[1] = get(kL2Phase) / 128.0f;
+        s.lfoVelo[0] = get(kL1Velo); s.lfoVelo[1] = get(kL2Velo);
 
         // BPM: the MPC's tempo when it provides one, else the patch's arp tempo.
         s.bpm = (ctx.transport.tempoValid && ctx.transport.bpm > 20.0) ? (float)ctx.transport.bpm : get(kArpTempo);
@@ -637,6 +661,12 @@ private:
         return best < 0 ? 0 : best;
     }
 
+    bool anyVoiceSounding(const Voice* except) const
+    {
+        for (const Voice& o : voices_) if (&o != except && o.active) return true;
+        return false;
+    }
+
     void startVoice(Voice& v, int note, int vel, int k, int U, int glideFrom, bool trigger)
     {
         const bool wasActive = v.active;
@@ -669,9 +699,17 @@ private:
         const bool keys[2] = {s_.l1key, s_.l2key};
         for (int l = 0; l < 2; ++l)
         {
-            if (keys[l]) v.lfo[l].restart(0.0f);
+            if (s_.common[l])
+            {
+                // Common: one LFO for all voices. With KeySync it restarts only when a note
+                // starts after silence (the X-Station's "global sync").
+                if (keys[l] && !anyVoiceSounding(&v)) globalLfoPhase_[l] = s_.lfoPhase[l];
+                v.lfo[l].restart(globalLfoPhase_[l]);
+            }
+            else if (keys[l]) v.lfo[l].restart(s_.lfoPhase[l]);
             else if (!wasActive) v.lfo[l].restart(globalLfoPhase_[l]);
             v.lfoFade[l] = s_.lfoFadeStep[l] >= 1.0f ? 1.0f : 0.0f;
+            v.lfoVel[l] = velocityGain(s_.lfoVelo[l], v.vel);
         }
         if (trigger) { v.amp.noteOn(); v.mod.noteOn(); v.fm.trigger(); restartColour(v); }
         v.ctr = 0;
@@ -814,8 +852,9 @@ private:
         const int waves[2] = {s.l1wave, s.l2wave};
         for (int l = 0; l < 2; ++l)
         {
-            float val = v.lfo[l].tick(waves[l], s.lfoCycles[l], v.rng);
-            if (s.uni[l] && waves[l] != kLSteps) val = 0.5f * (val + 1.0f);
+            float val = v.lfo[l].tick(waves[l], s.lfoCycles[l], s.oneShot[l], v.rng);
+            if (s.uni[l]) val = 0.5f * (val + 1.0f);
+            val *= v.lfoVel[l];
             if (v.lfoFade[l] < 1.0f) { v.lfoFade[l] += s.lfoFadeStep[l]; if (v.lfoFade[l] > 1.0f) v.lfoFade[l] = 1.0f; }
             v.lfoVal[l] = val * v.lfoFade[l];
         }

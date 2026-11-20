@@ -29,12 +29,16 @@ play your X-Station sounds on the MPC.
 - Osc 1 > 2 hard sync, osc 2 > 3 FM with its own AD envelope, LFO / envelope level modulation.
 - Filter: low-, band- or high-pass, 12 or 24 dB, overdrive, Q normalise, key tracking, envelope,
   LFO 2, velocity, mod wheel and aftertouch.
-- Amp and mod envelopes (ADSR + velocity); 2 LFOs (10 shapes, delay, tempo sync, key sync, unipolar).
+- Amp and mod envelopes (ADSR + velocity); 2 LFOs with the X-Station's 32 shapes (sine, triangle,
+  saw, square, S/H, envelope curves, chromatic / major / major-7 scales, 9 patterns; measured on the
+  hardware), delay, tempo sync, key sync with start phase, unipolar, one-shot, common (all voices)
+  and velocity.
 - Arpeggiator synced to the MPC tempo: Up, Down, Up-Down 1/2, Played, Random, Chord; 1-4 octaves;
   gate; latch.
 - Effects: distortion, tilt EQ, chorus/phaser, stereo delay (tempo sync), reverb (6 sizes),
   pan and auto-pan.
-- 6 touch-screen pages, all controls on Q-Links. 7 original programs built in.
+- 6 touch-screen pages plus an LFO MENU sub-page (press the LFO/ARP key again), all controls on
+  Q-Links. 7 original programs built in.
 
 ## Tested on
 
@@ -67,9 +71,9 @@ VST2 Plugins/Yann - VST - Jamiro/Content/Banks/2 Another Bank.syx
 At start-up Jamiro converts every program it finds, in file-name order. The first file becomes
 programs 100-199, the second 200-299, and so on. It reads X-Station bank and program dumps, and
 KS4 / KS5 / KS Rack / K-Station program and program-pair dumps. The conversion follows Novation's
-published program data layout. Envelope, LFO and depth curves are estimated, so patches sound
-close to the hardware but not identical. Not reproduced yet: arpeggiator rhythm patterns,
-one-shot LFOs, pattern LFO shapes, delay ratio, EQ modulation.
+published program data layout. Envelope and depth curves are estimated, so patches sound close to
+the hardware but not identical. LFO shapes, speed, phase and lock are read from the patch. Not
+reproduced yet: arpeggiator rhythm patterns, delay ratio, EQ modulation.
 
 ## Building
 
@@ -91,7 +95,7 @@ Releases are built by GitHub Actions with OpenMPC's release workflow (`.github/w
 
 Ideas, bug reports and pull requests are welcome, especially:
 - more accurate X-Station curves (envelope times, LFO rates, filter response);
-- arpeggiator rhythm patterns and the missing LFO modes;
+- arpeggiator rhythm patterns;
 - new original programs (please do not commit third-party sound banks);
 - CPU optimisation on 32-bit MPCs.
 
@@ -101,6 +105,12 @@ A French README is in `plugins/Jamiro/README.md`.
 
 ## Changes
 
+- **1.0.8**: the LFOs now have all 32 X-Station shapes, measured on a real X-Station (the 10
+  existing shapes keep their place and were corrected: falling saw, triangle starting at the bottom,
+  real decay / attack curves, true chromatic scale); new shapes include the envelope curves,
+  Maj-Modes, Major-7 and Patterns 1-9. LFO speed recalibrated on the hardware. New LFO MENU
+  sub-page (press LFO/ARP again): KeySync, Unipolar, One-Shot and Common as OFF / ON boxes, start
+  Phase and Velocity for each LFO. X-Station banks now load their LFO shape, phase and lock.
 - **1.0.7**: the 9 table waves rebuilt from measurements of a real X-Station (harmonic levels
   of each wave, static like the hardware), so they sound much more distinct; the HP / BP / HBP
   noises recoloured to match; every waveform now has the same loudness relative to the saw as on

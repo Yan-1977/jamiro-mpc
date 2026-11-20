@@ -87,17 +87,6 @@ inline float trimFor(const uint8_t* block)
 
 template <typename T> T clampv(T v, T lo, T hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
-// X-Station LFO shape (0..31) -> Jamiro LFO wave choice.
-inline int lfoWave(int x)
-{
-    if (x <= 6) return x;
-    if (x == 10 || x == 11 || x == 12) return 8;
-    if (x == 19) return 1;
-    if (x == 20 || x == 21 || x == 22) return 9;
-    if (x <= 18) return 7;
-    return 5;
-}
-
 // Fill `v` (plain values, parameter order) from one 128-byte block `x` and the optional
 // X-Station extension `ext` (nullptr for K-Station/KS data).
 inline void convertBlock(const uint8_t* x, const uint8_t* ext, float* v)
@@ -130,10 +119,11 @@ inline void convertBlock(const uint8_t* x, const uint8_t* ext, float* v)
     put(kMAtk, x[67]); put(kMDec, x[68]); put(kMSus, x[69]); put(kMRel, x[70]); put(kMVel, b(66));
     // K-Station packs only 4 LFO shapes (tri, saw, square, S/H) into byte 78.
     static const int kKsLfo[4] = { 1, 2, 3, 4 };
-    put(kL1Wave, (float)(ext ? lfoWave(ext[3]) : kKsLfo[(x[78] >> 2) & 3]));
-    put(kL2Wave, (float)(ext ? lfoWave(ext[4]) : kKsLfo[(x[78] >> 4) & 3]));
+    put(kL1Wave, (float)(ext ? lfoFromXStation(ext[3]) : kKsLfo[(x[78] >> 2) & 3]));
+    put(kL2Wave, (float)(ext ? lfoFromXStation(ext[4]) : kKsLfo[(x[78] >> 4) & 3]));
     put(kL1Speed, x[72]); put(kL1Delay, x[74]); put(kL1Sync, (float)clampv((int)x[73], 0, 34)); put(kL1Key, (float)((x[79] >> 1) & 1));
     put(kL2Speed, x[75]); put(kL2Delay, x[77]); put(kL2Sync, (float)clampv((int)x[76], 0, 34)); put(kL2Key, (float)((x[79] >> 4) & 1));
+    put(kL1Common, (float)((x[79] >> 2) & 1)); put(kL2Common, (float)((x[79] >> 5) & 1));   // packed parameter 6: lock
     put(kMwVib, b(34)); put(kMwFilt, b(48)); put(kMwFLfo, b(53)); put(kAtVib, b(35)); put(kAtFilt, b(49));
     put(kArpOn, (float)((x[88] >> 2) & 1)); put(kArpMode, (float)clampv((int)x[87], 0, 6));
     put(kArpOct, (float)((x[88] & 3) + 1)); put(kArpRate, (float)clampv((int)x[85], 0, 15));
@@ -152,6 +142,7 @@ inline void convertBlock(const uint8_t* x, const uint8_t* ext, float* v)
         put(kMixAdO3, clampv((float)ext[16] - 64.0f, -64.0f, 63.0f));
         put(kFiltVel, clampv((float)ext[17] - 64.0f, -64.0f, 63.0f));
         put(kL1Uni, (float)(ext[5] & 1)); put(kL2Uni, (float)(ext[6] & 1));
+        put(kL1Phase, (float)clampv((int)ext[7], 0, 127)); put(kL2Phase, (float)clampv((int)ext[8], 0, 127));
     }
     put(kVolume, clampv(-6.0f + trimFor(x), -40.0f, 6.0f));
 }
