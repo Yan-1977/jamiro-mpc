@@ -309,6 +309,7 @@ public:
         arpClear(); arpHeldCount_ = 0; arpKeysDown_ = 0;
         controllers_.reset();
         eq_.reset(); eqR_.reset(); chorus_.reset(); delay_.reset(); reverb_.reset(); limiter_.reset();
+        distIn_ = distOut_ = 0.0f; distGain_ = 1.0f;
         panPhase_ = 0.0f; globalLfoPhase_[0] = globalLfoPhase_[1] = 0.0f;
         volume_.snap(dbToGain(get(kVolume)));
     }
@@ -907,8 +908,10 @@ private:
         float* L = ctx.outputs[0];
         float* R = ctx.numOutputs > 1 ? ctx.outputs[1] : nullptr;
         const Settings& s = s_;
-        const float drive = 1.0f + s.dist * 30.0f;
-        const float distComp = 1.0f / std::sqrt(drive);
+        // Distortion: progressive drive (gentle at first, heavy at the top) with automatic
+        // level matching, so the knob changes the grit, not the volume.
+        const float drive = 1.0f + 40.0f * s.dist * s.dist;
+        const float envA = 1.0f - std::exp(-1.0f / (0.06f * sr_));    // 60 ms level followers
         float gl = 1.0f, gr = 1.0f;
         for (int i = 0; i < ctx.numFrames; ++i)
         {
@@ -920,7 +923,15 @@ private:
                 gl = std::cos(ang) * kSqrt2; gr = std::sin(ang) * kSqrt2;
             }
             float l = L[i] * s.mixGain, r = (R ? R[i] : L[i]) * s.mixGain;
-            if (s.dist > 0.0f) { l = fastTanh(l * drive) * distComp; r = fastTanh(r * drive) * distComp; }
+            if (s.dist > 0.0f)
+            {
+                const float dl = fastTanh(l * drive), dr = fastTanh(r * drive);
+                distIn_ += envA * (0.5f * (l * l + r * r) - distIn_);
+                distOut_ += envA * (0.5f * (dl * dl + dr * dr) - distOut_);
+                const float target = distOut_ > 1e-9f ? clamp(std::sqrt(distIn_ / distOut_), 0.05f, 1.5f) : 1.0f;
+                distGain_ += envA * (target - distGain_);
+                l = dl * distGain_; r = dr * distGain_;
+            }
             l = eq_.process(l) * gl;
             r = eqR_.process(r) * gr;
             if (chorus_.active()) chorus_.process(l, r);
@@ -952,6 +963,7 @@ private:
     Overdrive overdrive_;
     Smoother volume_;
     float sr_ = 44100.0f, panPhase_ = 0.0f, globalLfoPhase_[2] = {0.0f, 0.0f};
+    float distIn_ = 0.0f, distOut_ = 0.0f, distGain_ = 1.0f;   // distortion level matching
 };
 
 MPC_PLUGIN_ENTRY(Jamiro)

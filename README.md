@@ -100,6 +100,8 @@ A French README is in `plugins/Jamiro/README.md`.
 
 ## Changes
 
+- **1.0.6**: distortion keeps a constant volume over its whole range (automatic level matching)
+  with a more progressive drive; preset levels rebalanced.
 - **1.0.5**: oscillator octave knobs now go from -3 to +3, centred on 0 (KS patches use -1..+2
   and keep their settings); rebuilt effects with the same controls: 3-voice stereo chorus,
   6-stage stereo phaser with deeper notches, tape-style delay (filtered, softly saturated repeats
