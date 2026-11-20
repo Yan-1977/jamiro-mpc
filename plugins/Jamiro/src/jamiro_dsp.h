@@ -130,7 +130,7 @@ public:
     // Seconds for the attack colour to fade (at middle C) for each table.
     static float fadeSeconds(int table)
     {
-        static const float kFade[kTables] = { 0.28f, 1.1f, 0.55f, 0.35f, 0.7f, 1.3f, 0.8f, 0.6f, 0.4f };
+        static const float kFade[kTables] = { 0.28f, 2.0f, 0.9f, 0.12f, 1.4f, 2.5f, 1.0f, 1.2f, 0.5f };
         return kFade[clamp(table, 0, kTables - 1)];
     }
 
@@ -194,55 +194,31 @@ private:
     }
 
     // Harmonic recipes (original, by ear). attack = true for the bright onset spectrum.
+    // Harmonic levels 1..80 of each table, measured on a Novation X-Station (osc 1 alone, filter
+    // open, note C4) and expressed relative to the strongest harmonic. Only the levels are used:
+    // the phases are Jamiro's own, so the waveforms are resynthesised, not copied. The hardware
+    // waves are static while a key is held, so attack and body are the same spectrum.
+    static constexpr int kMeasured = 80;
     static double amp(int table, bool attack, int n)
     {
-        const double fn = (double)n;
-        const double pi = (double)kPi;
-        auto pick = [n](std::initializer_list<std::pair<int, double>> l) {
-            for (const auto& p : l) if (p.first == n) return p.second;
-            return 0.0;
+        (void)attack;
+        static const float kSpec[kTables][kMeasured] = {
+        { 1.0f, 0.2329f, 0.3766f, 0.0076f, 0.0211f, 0.6227f, 0.0291f, 0.0146f, 0.0258f, 0.0088f, 0.005f, 0.0039f, 0.0027f, 0.0049f, 0.0061f, 0.0017f, 0.0039f, 0.0255f, 0.0032f, 0.0f, 0.0016f, 0.0f, 0.0009f, 0.0018f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0022f, 0.0012f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f }, // Organ
+        { 0.1317f, 1.0f, 0.8136f, 0.9742f, 0.1719f, 0.5691f, 0.2008f, 0.4486f, 0.0448f, 0.0803f, 0.0258f, 0.0363f, 0.0854f, 0.0837f, 0.0534f, 0.0826f, 0.0444f, 0.0343f, 0.0325f, 0.0185f, 0.0277f, 0.0075f, 0.0053f, 0.007f, 0.0192f, 0.0199f, 0.0142f, 0.0312f, 0.032f, 0.0104f, 0.0188f, 0.005f, 0.0172f, 0.0111f, 0.0045f, 0.0103f, 0.0018f, 0.0029f, 0.0013f, 0.0071f, 0.0036f, 0.0062f, 0.005f, 0.0034f, 0.0018f, 0.0011f, 0.0017f, 0.001f, 0.0022f, 0.0015f, 0.0019f, 0.0009f, 0.0014f, 0.0011f, 0.0012f, 0.0009f, 0.0015f, 0.001f, 0.001f, 0.0011f, 0.0f, 0.0f, 0.002f, 0.0009f, 0.0023f, 0.0032f, 0.0014f, 0.003f, 0.0f, 0.0022f, 0.0035f, 0.0009f, 0.0012f, 0.0013f, 0.001f, 0.0009f, 0.0f, 0.0011f, 0.0041f, 0.0035f }, // Harpsichord
+        { 1.0f, 0.1431f, 0.0395f, 0.0024f, 0.0015f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0278f, 0.0009f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f }, // E.Piano
+        { 1.0f, 0.3579f, 0.1149f, 0.0354f, 0.0149f, 0.0084f, 0.0071f, 0.0033f, 0.0309f, 0.0369f, 0.0093f, 0.0126f, 0.0121f, 0.034f, 0.0334f, 0.0155f, 0.0112f, 0.0027f, 0.0031f, 0.0056f, 0.0052f, 0.0125f, 0.03f, 0.0172f, 0.0081f, 0.0174f, 0.0142f, 0.0429f, 0.0433f, 0.0139f, 0.0065f, 0.0048f, 0.0027f, 0.0f, 0.0021f, 0.0f, 0.0039f, 0.002f, 0.0f, 0.0036f, 0.0031f, 0.003f, 0.0013f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f }, // Slap
+        { 0.3178f, 1.0f, 0.5627f, 0.4186f, 0.3769f, 0.0761f, 0.176f, 0.0039f, 0.0728f, 0.0167f, 0.0257f, 0.0133f, 0.0085f, 0.0076f, 0.0022f, 0.0039f, 0.0f, 0.0023f, 0.0f, 0.0017f, 0.0012f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f }, // Rhodes
+        { 0.1122f, 1.0f, 0.0278f, 0.6846f, 0.0189f, 0.1497f, 0.0186f, 0.1658f, 0.0143f, 0.149f, 0.022f, 0.132f, 0.0265f, 0.187f, 0.024f, 0.0482f, 0.0293f, 0.1421f, 0.02f, 0.0055f, 0.0246f, 0.0755f, 0.0101f, 0.0154f, 0.013f, 0.0306f, 0.0062f, 0.0095f, 0.0049f, 0.0089f, 0.004f, 0.0048f, 0.0008f, 0.0034f, 0.003f, 0.0023f, 0.0029f, 0.0027f, 0.0098f, 0.0041f, 0.0043f, 0.0032f, 0.01f, 0.0f, 0.0033f, 0.0014f, 0.0042f, 0.0f, 0.002f, 0.0f, 0.0014f, 0.0f, 0.0009f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.001f, 0.0f, 0.0f, 0.0f, 0.001f, 0.0f, 0.0f, 0.0f }, // Tine
+        { 0.0444f, 0.7424f, 0.5824f, 0.8546f, 1.0f, 0.3892f, 0.8869f, 0.0377f, 0.815f, 0.2481f, 0.5523f, 0.3698f, 0.3347f, 0.3801f, 0.1746f, 0.3451f, 0.0688f, 0.293f, 0.0081f, 0.2396f, 0.0436f, 0.194f, 0.0727f, 0.1507f, 0.0887f, 0.1059f, 0.088f, 0.0702f, 0.0869f, 0.0358f, 0.0785f, 0.0114f, 0.0658f, 0.0077f, 0.0491f, 0.0152f, 0.0338f, 0.0183f, 0.0212f, 0.0178f, 0.0123f, 0.0149f, 0.0063f, 0.011f, 0.0027f, 0.0076f, 0.0f, 0.0049f, 0.0f, 0.0028f, 0.0f, 0.0013f, 0.001f, 0.0f, 0.0012f, 0.0f, 0.0016f, 0.0f, 0.0019f, 0.0009f, 0.0019f, 0.0012f, 0.0018f, 0.0014f, 0.0016f, 0.0015f, 0.0014f, 0.0015f, 0.0011f, 0.0015f, 0.0008f, 0.0015f, 0.0f, 0.0014f, 0.0f, 0.0012f, 0.0f, 0.0011f, 0.0f, 0.001f }, // Wurly
+        { 0.0336f, 1.0f, 0.3616f, 0.6493f, 0.3356f, 0.4474f, 0.2731f, 0.3402f, 0.2873f, 0.0753f, 0.3128f, 0.2136f, 0.2862f, 0.0781f, 0.2812f, 0.1376f, 0.1431f, 0.0519f, 0.0298f, 0.0045f, 0.0152f, 0.0196f, 0.0053f, 0.0206f, 0.0253f, 0.0376f, 0.0234f, 0.0391f, 0.0223f, 0.0185f, 0.0311f, 0.028f, 0.0212f, 0.0121f, 0.0047f, 0.0061f, 0.0071f, 0.0039f, 0.0115f, 0.009f, 0.0107f, 0.0034f, 0.0081f, 0.0024f, 0.0023f, 0.0012f, 0.0f, 0.0f, 0.0f, 0.0f, 0.001f, 0.0009f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0012f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f }, // Clav
+        { 1.0f, 0.765f, 0.4788f, 0.2845f, 0.1963f, 0.1469f, 0.1162f, 0.0953f, 0.0801f, 0.0691f, 0.0597f, 0.0528f, 0.0471f, 0.0422f, 0.0381f, 0.0345f, 0.0314f, 0.0289f, 0.0266f, 0.0246f, 0.0231f, 0.0213f, 0.0201f, 0.0192f, 0.0183f, 0.0173f, 0.0166f, 0.0159f, 0.0154f, 0.0149f, 0.0144f, 0.014f, 0.0137f, 0.0134f, 0.0129f, 0.0127f, 0.0124f, 0.0121f, 0.0118f, 0.0115f, 0.0113f, 0.011f, 0.0107f, 0.0105f, 0.0105f, 0.0099f, 0.0097f, 0.0094f, 0.0092f, 0.0089f, 0.0087f, 0.0084f, 0.0082f, 0.008f, 0.0077f, 0.0075f, 0.0073f, 0.0071f, 0.0069f, 0.0067f, 0.0065f, 0.0064f, 0.0062f, 0.0061f, 0.0059f, 0.0057f, 0.0056f, 0.0054f, 0.0053f, 0.0052f, 0.0051f, 0.005f, 0.0049f, 0.0048f, 0.0047f, 0.0045f, 0.0044f, 0.0043f, 0.004f, 0.0038f }, // AnaBass
         };
-        switch (table)
-        {
-            case 0: // Organ: drawbars 8, 4, 2 2/3, 2, 1 3/5, 1 1/3, 1; attack adds the 3rd-harmonic percussion
-            {
-                const double body = pick({{1, 1.0}, {2, 0.8}, {3, 0.6}, {4, 0.55}, {5, 0.15}, {6, 0.35}, {8, 0.3},
-                                          {10, 0.1}, {12, 0.12}, {16, 0.08}});
-                return attack ? body + pick({{3, 1.2}, {6, 0.25}, {9, 0.15}}) : body;
-            }
-            case 1: // Harpsichord: very bright pluck settling to a softer string
-                if (n > 120) return 0.0;
-                return attack ? (0.25 + 0.75 * std::fabs(std::sin(pi * fn * 0.11))) / std::pow(fn, 0.55)
-                              : (0.3 + 0.7 * std::fabs(std::sin(pi * fn * 0.11))) / std::pow(fn, 1.15);
-            case 2: // E.Piano (FM-style tine piano): metallic ping at 7-8 and 13-15, then a sweet two-partial body
-                return attack ? pick({{1, 1.0}, {2, 0.7}, {3, 0.3}, {4, 0.25}, {5, 0.15}, {6, 0.12}, {7, 0.45}, {8, 0.35},
-                                      {9, 0.2}, {13, 0.25}, {14, 0.4}, {15, 0.25}, {21, 0.08}})
-                              : pick({{1, 1.0}, {2, 0.45}, {3, 0.12}, {4, 0.06}, {5, 0.03}});
-            case 3: // Slap bass: snappy string pop, then a round low body
-                if (n > 80) return 0.0;
-                return attack ? ((n >= 3 && n <= 12) ? 1.8 : 1.0) / std::pow(fn, 0.6)
-                              : 1.0 / std::pow(fn, 1.5);
-            case 4: // Rhodes: bark and bell tine on the attack, a warm almost-sine body
-                return attack ? pick({{1, 1.0}, {2, 0.9}, {3, 0.55}, {4, 0.45}, {5, 0.3}, {6, 0.22}, {7, 0.35}, {8, 0.3},
-                                      {9, 0.2}, {10, 0.12}, {13, 0.1}, {14, 0.15}})
-                              : pick({{1, 1.0}, {2, 0.28}, {3, 0.09}, {4, 0.05}, {5, 0.02}});
-            case 5: // Rhodes tine: strong bell partials ringing longer
-                return attack ? pick({{1, 1.0}, {2, 0.4}, {3, 0.15}, {4, 0.35}, {6, 0.15}, {7, 0.6}, {9, 0.2},
-                                      {11, 0.15}, {14, 0.4}, {17, 0.12}, {21, 0.1}})
-                              : pick({{1, 1.0}, {2, 0.25}, {4, 0.1}, {7, 0.12}});
-            case 6: // Wurly: reedy bite with strong odd harmonics, mellowing out
-                return attack ? pick({{1, 1.0}, {2, 0.5}, {3, 0.85}, {4, 0.35}, {5, 0.65}, {6, 0.25}, {7, 0.5},
-                                      {8, 0.15}, {9, 0.35}, {10, 0.1}, {11, 0.25}, {13, 0.15}, {15, 0.1}})
-                              : pick({{1, 1.0}, {2, 0.3}, {3, 0.4}, {4, 0.1}, {5, 0.15}, {7, 0.05}});
-            case 7: // Clavinet: thin, nasal pickup comb, softening as the string decays
-                if (n > 120) return 0.0;
-                return std::pow(std::fabs(std::sin(pi * fn * 0.09)), 0.8) / std::pow(fn, attack ? 0.6 : 1.05);
-            case 8: // Analog bass: resonant saw pluck closing to a soft round tone
-                if (n > 96) return 0.0;
-                return attack ? ((n >= 3 && n <= 6) ? 1.6 : 1.0) / (fn * (1.0 + (fn / 24.0) * (fn / 24.0)))
-                              : 1.0 / (fn * (1.0 + (fn / 6.0) * (fn / 6.0)));
-        }
-        return 0.0;
+        if (n <= kMeasured) return (double)kSpec[table][n - 1];
+        // above the measured range (low notes only): let the top of the spectrum roll off gently
+        double tail = 0.0;
+        for (int k = kMeasured - 9; k <= kMeasured; ++k) tail += (double)kSpec[table][k - 1];
+        tail *= 0.1;
+        return tail * std::pow((double)kMeasured / (double)n, 2.0);
     }
 
     float data_[kTables][2][kLevels][kSize + 1];
@@ -268,7 +244,7 @@ inline std::vector<std::string> oscWaveNames()
 struct Osc
 {
     float phase = 0.0f, inc = 0.0f;
-    float n1 = 0.0f, n2 = 0.0f;   // noise filter states
+    float n1 = 0.0f, n2 = 0.0f, n3 = 0.0f;   // noise filter states
     int tableLevel = 0;           // band-limit level for the table waves (set with inc)
     float bright = 0.0f;          // table waves: 1 = attack colour .. 0 = body (fades per note)
     bool wrapped = false;
@@ -284,7 +260,7 @@ struct Osc
         switch (wave)
         {
             case kSine: return mpc::dsp::WavetableSine::lookup(t);
-            case kTriangle: return 1.0f - 4.0f * std::fabs(t - 0.5f);
+            case kTriangle: return 1.288f * (1.0f - 4.0f * std::fabs(t - 0.5f));   // +2.2 dB vs saw, as measured on the X-Station
             case kSaw:
             {
                 float y = 2.0f * t - 1.0f - polyBlep(t, dt);
@@ -305,11 +281,32 @@ struct Osc
                 y -= polyBlep(t2, dt);
                 return y;
             }
-            case kWhite: return rng.nextBipolar();
-            case kHPNoise: { const float x = rng.nextBipolar(); n1 += 0.15f * (x - n1); return (x - n1) * 1.2f; }
-            case kBPNoise: { const float x = rng.nextBipolar(); n1 += 0.25f * (x - n1); n2 += 0.05f * (n1 - n2); return (n1 - n2) * 3.0f; }
-            case kHBPNoise:{ const float x = rng.nextBipolar(); n1 += 0.6f * (x - n1); n2 += 0.25f * (n1 - n2); return (n1 - n2) * 2.0f; }
-            default: return tables.read(wave - kFirstTable, t, tableLevel, bright);
+            case kWhite: return 1.122f * rng.nextBipolar();
+            // Coloured noises, shaped and levelled to match X-Station measurements (one-pole stages at 44.1 kHz).
+            case kHPNoise:   // white plus a high shelf (+13 dB at 16 kHz)
+            { const float x = rng.nextBipolar(); n1 += 0.68012f * (x - n1); return 0.3003f * (x + 8.0f * (x - n1)); }
+            case kBPNoise:   // band around 2-5 kHz, about 27 dB above the low end
+            {
+                const float x = rng.nextBipolar();
+                n1 += 0.22621f * (x - n1); const float h1 = x - n1;
+                n2 += 0.22621f * (h1 - n2); const float h2 = h1 - n2;
+                n3 += 0.34782f * (h2 - n3);
+                return 3.073f * (n3 + 0.03f * x);
+            }
+            case kHBPNoise:  // white plus a steep lift above 6 kHz
+            {
+                const float x = rng.nextBipolar();
+                n1 += 0.57466f * (x - n1); const float h1 = x - n1;
+                n2 += 0.57466f * (h1 - n2); const float h2 = h1 - n2;
+                return 0.4857f * (x + 8.0f * h2);
+            }
+            default:
+            {
+                // level of each table relative to the saw, as on the X-Station
+                static const float kTableGain[9] = { 1.413f, 1.259f, 1.462f, 1.318f, 1.318f, 1.288f, 0.912f, 1.148f, 1.109f };
+                const int k = wave - kFirstTable;
+                return kTableGain[k] * tables.read(k, t, tableLevel, bright);
+            }
         }
     }
 };
@@ -807,20 +804,19 @@ private:
 inline float envAttackMs(float v) { return 1.0f * std::exp2(clamp(v, 0.0f, 127.0f) * (14.0f / 127.0f)); }
 inline float envTauMs(float v)    { return 0.5f * std::exp2(clamp(v, 0.0f, 127.0f) * (14.0f / 127.0f)); }
 
-// Overdrive: tanh saturation that leaves a mid-level signal (0.5) at the same level, so
-// turning it up adds grit and compression instead of a big jump in volume.
+// Overdrive: drives the FILTER OUTPUT into a tanh saturator, where it adds grit and
+// bite even to square waves and to resonant, closed-filter sounds. It is level-matched
+// per voice in Jamiro.cpp, so the knob changes the character, not the volume.
 struct Overdrive
 {
-    float g = 1.0f, norm = 1.0f;
+    float gPost = 1.0f;
     bool on = false;
     void set(float amount)   // 0..127
     {
         const float a = clamp(amount, 0.0f, 127.0f) / 127.0f;
         on = a > 0.0f;
-        g = 1.0f + 15.0f * a * a;
-        norm = 0.5f / std::tanh(0.5f * g);
+        gPost = 1.0f + 24.0f * a * a;
     }
-    float process(float x) const { return on ? fastTanh(g * x) * norm : x; }
 };
 
 // State-variable filter (Andrew Simper's TPT form, public technique) with a soft

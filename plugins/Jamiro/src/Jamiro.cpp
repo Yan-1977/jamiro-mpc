@@ -354,6 +354,7 @@ private:
         float pw[3] = {0.0f, 0.0f, 0.0f}, lvl[3] = {0.0f, 0.0f, 0.0f};
         float fmIndex = 0.0f, ampVel = 1.0f, modVel = 1.0f, inGain = 1.0f, bpGain = 1.0f;
         float gL = 1.0f, gR = 1.0f;   // unison level compensation + stereo spread
+        float odIn = 0.0f, odOut = 0.0f, odGain = 1.0f;   // overdrive level matching
     };
 
     // Per-block snapshot of everything the audio code needs.
@@ -416,6 +417,7 @@ private:
         s.cutoffOct = cutoffOct(get(kCutoff));
         s.reso = get(kReso) / 127.0f;
         overdrive_.set(get(kDrive));
+        odA_ = 1.0f - std::exp(-1.0f / (0.03f * sr_));
         s.qnorm = get(kQNorm) / 127.0f;
         s.keyTrack = get(kKeyTrack) / 127.0f;
         s.fEnvOct = get(kFEnv) / 64.0f * 8.0f;
@@ -475,7 +477,7 @@ private:
         }
 
         // Effects
-        s.mixGain = dbToGain(get(kMixLevel) * 0.5f);
+        s.mixGain = dbToGain(get(kMixLevel) * 0.3f);   // 0..30 -> 0..+9 dB
         s.dist = get(kDist) / 127.0f;
         eq_.set(get(kEqLevel), get(kEqFreq), sr_);
         eqR_.set(get(kEqLevel), get(kEqFreq), sr_);
@@ -661,6 +663,7 @@ private:
             // level jump (and clipping) instead of a wide, chorused sound.
             for (int o = 0; o < 3; ++o) { v.osc[o].phase = (o == 0 && U == 1) ? 0.0f : v.rng.nextFloat(); v.osc[o].n1 = v.osc[o].n2 = 0.0f; }
             v.f1.reset(); v.f2.reset();
+            v.odIn = v.odOut = 0.0f; v.odGain = 1.0f / std::fmax(overdrive_.gPost, 1.0f);
             v.driftTarget = v.rng.nextBipolar() * s_.drift;
         }
         const bool keys[2] = {s_.l1key, s_.l2key};
@@ -889,11 +892,21 @@ private:
 
             float mix = a * v.lvl[0] + b * v.lvl[1] + c * v.lvl[2] + a * b * s.ring;
             if (noise) mix += v.rng.nextBipolar() * s.noise;
-            mix = overdrive_.process(mix * v.inGain);
+            mix *= v.inGain;
 
             float y = v.f1.process(mix, mode);
             if (two) y = v.f2.process(y, mode);
             y *= v.bpGain;
+            if (overdrive_.on)
+            {
+                // post-filter drive with per-voice level matching (~30 ms followers)
+                const float dr = fastTanh(overdrive_.gPost * y);
+                v.odIn += odA_ * (y * y - v.odIn);
+                v.odOut += odA_ * (dr * dr - v.odOut);
+                const float target = v.odOut > 1e-10f ? clamp(std::sqrt(v.odIn / v.odOut), 0.03f, 1.5f) : v.odGain;
+                v.odGain += odA_ * (target - v.odGain);
+                y = dr * v.odGain;
+            }
 
             const float out = y * v.amp.process() * v.ampVel * kVoiceGain;
             outL[i] += out * v.gL;
@@ -961,6 +974,7 @@ private:
     Reverb reverb_;
     PeakLimiter limiter_;
     Overdrive overdrive_;
+    float odA_ = 0.001f;
     Smoother volume_;
     float sr_ = 44100.0f, panPhase_ = 0.0f, globalLfoPhase_[2] = {0.0f, 0.0f};
     float distIn_ = 0.0f, distOut_ = 0.0f, distGain_ = 1.0f;   // distortion level matching

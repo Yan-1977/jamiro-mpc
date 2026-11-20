@@ -23,8 +23,9 @@ play your X-Station sounds on the MPC.
 - 8 voices, 3 oscillators per voice, plus noise and ring modulation (1×2). Unison up to 8 voices.
 - Voice modes Mono, Mono AG (auto-glide on legato notes), Poly 1 and Poly 2; portamento.
 - 17 waveforms: sine, triangle, saw (with "double saw"), variable pulse, 4 noise types, and 9
-  additive tables in the spirit of the X-Station's sampled waves (organ, harpsichord, e-piano,
-  slap bass, Rhodes, tine, Wurly, Clavinet, analog bass). These are resynthesised, not samples.
+  additive tables (organ, harpsichord, e-piano, slap bass, Rhodes, tine, Wurly, Clavinet, analog
+  bass). Their harmonic levels, the noise colours and the relative loudness of every waveform
+  were measured on a real X-Station; the tables are resynthesised from those levels, not samples.
 - Osc 1 > 2 hard sync, osc 2 > 3 FM with its own AD envelope, LFO / envelope level modulation.
 - Filter: low-, band- or high-pass, 12 or 24 dB, overdrive, Q normalise, key tracking, envelope,
   LFO 2, velocity, mod wheel and aftertouch.
@@ -100,6 +101,11 @@ A French README is in `plugins/Jamiro/README.md`.
 
 ## Changes
 
+- **1.0.7**: the 9 table waves rebuilt from measurements of a real X-Station (harmonic levels
+  of each wave, static like the hardware), so they sound much more distinct; the HP / BP / HBP
+  noises recoloured to match; every waveform now has the same loudness relative to the saw as on
+  the hardware (triangle slightly louder). Overdrive now works after the filter with a steady
+  level, Mix Level range reduced to +9 dB; preset levels rebalanced.
 - **1.0.6**: distortion keeps a constant volume over its whole range (automatic level matching)
   with a more progressive drive; preset levels rebalanced.
 - **1.0.5**: oscillator octave knobs now go from -3 to +3, centred on 0 (KS patches use -1..+2
