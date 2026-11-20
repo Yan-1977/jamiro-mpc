@@ -6,10 +6,10 @@ on:
       dry_run: { type: boolean, default: true }
 jobs:
   release:
-    uses: open-mpc/mpc-vst-plugins/.github/workflows/vst-release.yml@5fd7c1f67924dde2610766382ea9c853942887c9
+    uses: open-mpc/mpc-vst-plugins/.github/workflows/vst-release.yml@1af05b911e8580c8c2e473a1cc10119132e06eca
     permissions: { contents: write }
     with:
-      tools_ref: 5fd7c1f67924dde2610766382ea9c853942887c9
+      tools_ref: 1af05b911e8580c8c2e473a1cc10119132e06eca
       tag: jamiro-v${{ inputs.version }}
       version: ${{ inputs.version }}
       sdk_project: plugins/Jamiro

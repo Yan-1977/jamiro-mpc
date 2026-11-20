@@ -149,7 +149,7 @@ public:
         for (int o = 0; o < 3; ++o)
         {
             addParam(choiceParam(kIds[o][0], kNames[o][0], oscWaveNames(), kSaw));
-            addParam(intParam(kIds[o][1], kNames[o][1], -1, 2, 0, "oct"));
+            addParam(intParam(kIds[o][1], kNames[o][1], -3, 3, 0, "oct"));   // -3..+3 (KS patches use -1..+2)
             addParam(intParam(kIds[o][2], kNames[o][2], -12, 12, 0, "st"));
             addParam(floatParam(kIds[o][3], kNames[o][3], -50.0f, 50.0f, 0.0f, "ct", 0));
             addParam(bip(kIds[o][4], kNames[o][4], 0.0f));

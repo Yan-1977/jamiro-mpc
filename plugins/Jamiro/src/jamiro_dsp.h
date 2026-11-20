@@ -407,22 +407,55 @@ struct TiltEQ
     void reset() { z = 0.0f; }
 };
 
-// Stereo chorus / phaser.
+// Small ring buffer with 4-point Hermite interpolation (smoother than linear for
+// modulated delays: no dulling, no zipper on chorus / delay time changes).
+struct HermiteDelay
+{
+    std::vector<float> buf;
+    int mask = 0, w = 0;
+    void prepare(int maxSamples)
+    {
+        int n = 16;
+        while (n < maxSamples + 8) n <<= 1;
+        buf.assign((size_t)n, 0.0f);
+        mask = n - 1; w = 0;
+    }
+    void reset() { std::fill(buf.begin(), buf.end(), 0.0f); w = 0; }
+    void write(float x) { buf[(size_t)w] = x; w = (w + 1) & mask; }
+    int maxDelay() const { return mask - 4; }
+    float read(float d) const   // d samples ago, d >= 1
+    {
+        d = clamp(d, 1.0f, (float)(mask - 4));
+        const int i = (int)d;
+        const float f = d - (float)i;
+        const float xm1 = buf[(size_t)((w - i + 1) & mask)];
+        const float x0 = buf[(size_t)((w - i) & mask)];
+        const float x1 = buf[(size_t)((w - i - 1) & mask)];
+        const float x2 = buf[(size_t)((w - i - 2) & mask)];
+        const float c1 = 0.5f * (x1 - xm1);
+        const float c2 = xm1 - 2.5f * x0 + 2.0f * x1 - 0.5f * x2;
+        const float c3 = 0.5f * (x2 - xm1) + 1.5f * (x0 - x1);
+        return ((c3 * f + c2) * f + c1) * f + x0;
+    }
+};
+
+// Stereo chorus (3 voices per side) / phaser (6 stages per side).
 class ChorusPhaser
 {
 public:
     void prepare(double sr)
     {
         sr_ = (float)sr;
-        dl_[0].prepare((int)(0.05 * sr) + 4);
-        dl_[1].prepare((int)(0.05 * sr) + 4);
+        dl_[0].prepare((int)(0.04 * sr) + 8);
+        dl_[1].prepare((int)(0.04 * sr) + 8);
         reset();
     }
     void reset()
     {
         dl_[0].reset(); dl_[1].reset();
-        for (int c = 0; c < 2; ++c) { fb_[c] = 0.0f; for (int s = 0; s < 4; ++s) ap_[c][s] = 0.0f; }
-        phase_ = 0.0f;
+        for (int c = 0; c < 2; ++c) { fb_[c] = 0.0f; hp_[c] = 0.0f; lp_[c] = 0.0f; for (int s = 0; s < kStages; ++s) ap_[c][s] = 0.0f; k_[c] = 0.0f; }
+        phase_ = 0.0f; ctr_ = 0;
+        for (int c = 0; c < 2; ++c) for (int v = 0; v < 3; ++v) { tap_[c][v] = 0.0f; tapStep_[c][v] = 0.0f; }
     }
     // type 0 = chorus, 1 = phaser. mix/rate/depth 0..127, feedback -64..63
     void set(int type, float mix, float rate, float depth, float feedback)
@@ -431,118 +464,167 @@ public:
         mix_ = clamp(mix / 127.0f, 0.0f, 1.0f);
         inc_ = 0.05f * std::exp2(clamp(rate, 0.0f, 127.0f) / 127.0f * 8.0f) / sr_;
         depth_ = clamp(depth / 127.0f, 0.0f, 1.0f);
-        fbk_ = clamp(feedback / 64.0f, -1.0f, 1.0f) * 0.85f;
+        fbk_ = clamp(feedback / 64.0f, -1.0f, 1.0f) * (type == 0 ? 0.6f : 0.85f);
+        hpA_ = 1.0f - std::exp(-kTwoPi * 150.0f / sr_);
+        lpA_ = 1.0f - std::exp(-kTwoPi * 7000.0f / sr_);
     }
     bool active() const { return mix_ > 0.0f; }
 
     void process(float& l, float& r)
     {
         phase_ += inc_; if (phase_ >= 1.0f) phase_ -= 1.0f;
-        const float m0 = mpc::dsp::WavetableSine::lookup(phase_);
-        float m1p = phase_ + 0.25f; if (m1p >= 1.0f) m1p -= 1.0f;
-        const float m1 = mpc::dsp::WavetableSine::lookup(m1p);
-        float in[2] = { l, r };
-        float wet[2];
+        float in[2] = { l, r }, wet[2];
         if (type_ == 0)
         {
-            const float base = 0.007f * sr_, swing = 0.006f * sr_ * depth_;
-            const float mods[2] = { m0, m1 };
+            // Three taps per side, 120 degrees apart, the right side a quarter turn later.
+            // The LFO is evaluated every 8 samples; tap delays ramp linearly in between.
+            if ((ctr_++ & 7) == 0)
+            {
+                const float base = 0.0075f * sr_, swing = 0.0055f * sr_ * (0.15f + 0.85f * depth_);
+                float ahead = phase_ + 8.0f * inc_; if (ahead >= 1.0f) ahead -= 1.0f;
+                for (int c = 0; c < 2; ++c)
+                    for (int v = 0; v < 3; ++v)
+                    {
+                        float p = ahead + (float)v / 3.0f + (c ? 0.25f : 0.0f);
+                        p -= std::floor(p);
+                        const float target = base * (1.0f + 0.35f * (float)v) + swing * (0.5f + 0.5f * mpc::dsp::WavetableSine::lookup(p));
+                        if (tap_[c][v] <= 0.0f) tap_[c][v] = target;
+                        tapStep_[c][v] = (target - tap_[c][v]) * 0.125f;
+                    }
+            }
             for (int c = 0; c < 2; ++c)
             {
-                const float d = base + swing * (0.5f + 0.5f * mods[c]) + 1.0f;
-                wet[c] = dl_[c].readLinear(d);
-                dl_[c].write(in[c] + wet[c] * fbk_);
+                float sum = 0.0f;
+                for (int v = 0; v < 3; ++v) { tap_[c][v] += tapStep_[c][v]; sum += dl_[c].read(tap_[c][v]); }
+                sum *= (1.0f / 3.0f);
+                lp_[c] += lpA_ * (sum - lp_[c]);            // tame the feedback brightness
+                dl_[c].write(in[c] + lp_[c] * fbk_);
+                hp_[c] += hpA_ * (sum - hp_[c]);            // keep the lows out of the wet signal
+                wet[c] = sum - hp_[c];
             }
+            l = l * (1.0f - 0.45f * mix_) + wet[0] * mix_ * 0.95f;
+            r = r * (1.0f - 0.45f * mix_) + wet[1] * mix_ * 0.95f;
         }
         else
         {
-            const float mods[2] = { m0, m1 };
+            if ((ctr_++ & 7) == 0)
+                for (int c = 0; c < 2; ++c)
+                {
+                    float p = phase_ + (c ? 0.25f : 0.0f); if (p >= 1.0f) p -= 1.0f;
+                    const float m = 0.5f + 0.5f * mpc::dsp::WavetableSine::lookup(p);
+                    // exponential sweep from 120 Hz up to ~120 Hz x 2^(1..6.5 octaves)
+                    const float hz = std::fmin(120.0f * std::exp2(m * (1.0f + 5.5f * depth_)), 0.42f * sr_);
+                    const float tn = std::tan(kPi * hz / sr_);
+                    k_[c] = (tn - 1.0f) / (tn + 1.0f);
+                }
             for (int c = 0; c < 2; ++c)
             {
-                // Sweep 4 first-order allpasses between ~200 Hz and ~4 kHz.
-                const float hz = 200.0f * std::exp2((0.5f + 0.5f * mods[c]) * (1.0f + 3.3f * depth_));
-                const float tn = std::tan(kPi * std::fmin(hz, 0.45f * sr_) / sr_);
-                const float k = (tn - 1.0f) / (tn + 1.0f);
                 float x = in[c] + fb_[c] * fbk_;
-                for (int s = 0; s < 4; ++s)
+                for (int s = 0; s < kStages; ++s)
                 {
-                    const float y = k * x + ap_[c][s];
-                    ap_[c][s] = x - k * y;
+                    const float y = k_[c] * x + ap_[c][s];
+                    ap_[c][s] = x - k_[c] * y;
                     x = y;
                 }
-                fb_[c] = x;
+                fb_[c] = mpc::dsp::flushDenormal(x);
                 wet[c] = x;
             }
+            // Equal dry + wet at full mix gives the deepest notches.
+            l = l * (1.0f - 0.5f * mix_) + wet[0] * 0.5f * mix_;
+            r = r * (1.0f - 0.5f * mix_) + wet[1] * 0.5f * mix_;
         }
-        l = l * (1.0f - 0.5f * mix_) + wet[0] * mix_;
-        r = r * (1.0f - 0.5f * mix_) + wet[1] * mix_;
     }
 
 private:
-    mpc::dsp::DelayLine dl_[2];
+    static constexpr int kStages = 6;
+    HermiteDelay dl_[2];
     float sr_ = 44100.0f, phase_ = 0.0f, inc_ = 0.0f, mix_ = 0.0f, depth_ = 0.0f, fbk_ = 0.0f;
-    float ap_[2][4] = {}, fb_[2] = {};
+    float ap_[2][kStages] = {}, fb_[2] = {}, hp_[2] = {}, lp_[2] = {}, k_[2] = {};
+    float hpA_ = 0.02f, lpA_ = 0.6f;
+    float tap_[2][3] = {}, tapStep_[2][3] = {};
     int type_ = 0;
+    unsigned ctr_ = 0;
 };
 
-// Stereo (ping-pong capable) delay. Send/feedback/width 0..127.
+// Stereo (ping-pong capable) tape-style delay. Send/feedback/width 0..127.
+// Repeats are band-limited (low-cut + high-cut) and softly saturated in the loop, so
+// they darken like an analog echo and can never run away, even at full feedback.
 class StereoDelay
 {
 public:
     void prepare(double sr)
     {
         sr_ = (float)sr;
-        const int maxD = (int)(4.0 * sr) + 4;
+        const int maxD = (int)(4.0 * sr) + 8;
         dl_[0].prepare(maxD); dl_[1].prepare(maxD);
+        lpA_ = 1.0f - std::exp(-kTwoPi * 5500.0f / sr_);
+        hpA_ = 1.0f - std::exp(-kTwoPi * 90.0f / sr_);
+        modInc_ = 0.35f / sr_;
         reset();
     }
-    void reset() { dl_[0].reset(); dl_[1].reset(); damp_[0] = damp_[1] = 0.0f; }
+    void reset()
+    {
+        dl_[0].reset(); dl_[1].reset();
+        for (int c = 0; c < 2; ++c) { lp_[c] = hp_[c] = 0.0f; }
+        modPhase_ = 0.0f; samples_ = 0.0f;
+    }
     void set(float send, float timeMs, float feedback, float width)
     {
         send_ = clamp(send / 127.0f, 0.0f, 1.0f);
-        targetSamples_ = clamp(timeMs * 0.001f * sr_, 1.0f, (float)dl_[0].maxDelay());
-        fb_ = clamp(feedback / 127.0f, 0.0f, 1.0f) * 0.92f;
+        targetSamples_ = clamp(timeMs * 0.001f * sr_, 2.0f, (float)dl_[0].maxDelay() - 64.0f);
+        fb_ = clamp(feedback / 127.0f, 0.0f, 1.0f) * 0.97f;
         width_ = clamp(width / 127.0f, 0.0f, 1.0f);
     }
     bool active() const { return send_ > 0.0f; }
     void process(float& l, float& r)
     {
-        // Glide the delay time to avoid clicks when it changes.
-        samples_ += (targetSamples_ - samples_) * 0.0005f;
+        // Glide the delay time (tape-like pitch bend instead of clicks) and add a tiny wow.
         if (samples_ < 1.0f) samples_ = targetSamples_;
-        const float dL = dl_[0].readLinear(samples_);
-        const float dR = dl_[1].readLinear(samples_);
+        samples_ += (targetSamples_ - samples_) * 0.0004f;
+        modPhase_ += modInc_; if (modPhase_ >= 1.0f) modPhase_ -= 1.0f;
+        const float wow = 0.0003f * sr_ * mpc::dsp::WavetableSine::lookup(modPhase_);
+        const float dL = dl_[0].read(samples_ + wow);
+        const float dR = dl_[1].read(samples_ - wow);
         const float in = 0.5f * (l + r);
         // width 0: two mono echoes, width 1: full ping-pong
-        const float inL = in + fb_ * (dL * (1.0f - width_) + dR * width_);
-        const float inR = in * (1.0f - width_) + fb_ * (dR * (1.0f - width_) + dL * width_);
-        damp_[0] += 0.35f * (inL - damp_[0]);
-        damp_[1] += 0.35f * (inR - damp_[1]);
-        dl_[0].write(damp_[0]);
-        dl_[1].write(damp_[1]);
+        float fbL = dL * (1.0f - width_) + dR * width_;
+        float fbR = dR * (1.0f - width_) + dL * width_;
+        float x[2] = { in + fb_ * fbL, in * (1.0f - width_) + fb_ * fbR };
+        for (int c = 0; c < 2; ++c)
+        {
+            lp_[c] += lpA_ * (x[c] - lp_[c]);
+            hp_[c] += hpA_ * (lp_[c] - hp_[c]);
+            float y = lp_[c] - hp_[c];
+            y = fastTanh(y * 0.8f) * 1.25f;   // gentle tape saturation, bounded
+            dl_[c].write(mpc::dsp::flushDenormal(y));
+        }
         l += dL * send_;
         r += dR * send_;
     }
 private:
-    mpc::dsp::DelayLine dl_[2];
+    HermiteDelay dl_[2];
     float sr_ = 44100.0f, send_ = 0.0f, targetSamples_ = 1000.0f, samples_ = 0.0f, fb_ = 0.0f, width_ = 0.0f;
-    float damp_[2] = {};
+    float lp_[2] = {}, hp_[2] = {}, lpA_ = 0.5f, hpA_ = 0.01f, modPhase_ = 0.0f, modInc_ = 0.0f;
 };
 
-// Schroeder/Moorer reverb: 4 damped combs + 2 allpasses per channel.
+// Stereo reverb: pre-delay, 8 damped feedback combs + 4 series allpasses per side, with
+// the classic public-domain "Freeverb" tunings and stereo spread. Six room sizes.
 class Reverb
 {
 public:
-    static constexpr int kCombs = 4, kAps = 2;
+    static constexpr int kCombs = 8, kAps = 4;
     void prepare(double sr)
     {
         sr_ = (float)sr;
-        const float scale = sr_ / 44100.0f * 1.3f;   // room for the largest type
+        const float scale = sr_ / 44100.0f * 1.25f;   // room for the largest type
         for (int c = 0; c < 2; ++c)
         {
-            for (int i = 0; i < kCombs; ++i) comb_[c][i].assign((size_t)((kCombLen[i] + 23 * c) * scale) + 2, 0.0f);
-            for (int i = 0; i < kAps; ++i)   ap_[c][i].assign((size_t)((kApLen[i] + 13 * c) * scale) + 2, 0.0f);
+            for (int i = 0; i < kCombs; ++i) comb_[c][i].assign((size_t)((kCombLen[i] + kSpread * c) * scale) + 2, 0.0f);
+            for (int i = 0; i < kAps; ++i)   ap_[c][i].assign((size_t)((kApLen[i] + kSpread * c) * scale) + 2, 0.0f);
         }
+        pre_.prepare((int)(0.08 * sr) + 8);
+        inHpA_ = 1.0f - std::exp(-kTwoPi * 120.0f / sr_);
+        inLpA_ = 1.0f - std::exp(-kTwoPi * 9000.0f / sr_);
         reset();
     }
     void reset()
@@ -552,32 +634,37 @@ public:
             for (int i = 0; i < kCombs; ++i) { std::fill(comb_[c][i].begin(), comb_[c][i].end(), 0.0f); combPos_[c][i] = 0; combLp_[c][i] = 0.0f; }
             for (int i = 0; i < kAps; ++i)   { std::fill(ap_[c][i].begin(), ap_[c][i].end(), 0.0f); apPos_[c][i] = 0; }
         }
+        pre_.reset(); inHp_ = inLp_ = 0.0f;
     }
     // type 0..5 (Echo .. Great hall), send/decay 0..127
     void set(int type, float send, float decay)
     {
-        static const float kSize[6] = { 0.3f, 0.45f, 0.65f, 0.8f, 1.0f, 1.25f };
-        const float size = kSize[clamp(type, 0, 5)];
+        static const float kSize[6]   = { 0.32f, 0.48f, 0.68f, 0.82f, 1.0f, 1.2f };
+        static const float kPreMs[6]  = { 2.0f, 6.0f, 12.0f, 14.0f, 22.0f, 32.0f };
+        static const float kDamp[6]   = { 0.45f, 0.35f, 0.25f, 0.3f, 0.22f, 0.18f };
+        const int t = clamp(type, 0, 5);
+        const float size = kSize[t];
         for (int c = 0; c < 2; ++c)
         {
             for (int i = 0; i < kCombs; ++i)
-            {
-                int len = (int)((kCombLen[i] + 23 * c) * size * sr_ / 44100.0f);
-                combLen_[c][i] = clamp(len, 16, (int)comb_[c][i].size() - 1);
-            }
+                combLen_[c][i] = clamp((int)((kCombLen[i] + kSpread * c) * size * sr_ / 44100.0f), 16, (int)comb_[c][i].size() - 1);
             for (int i = 0; i < kAps; ++i)
-            {
-                int len = (int)((kApLen[i] + 13 * c) * size * sr_ / 44100.0f);
-                apLen_[c][i] = clamp(len, 8, (int)ap_[c][i].size() - 1);
-            }
+                apLen_[c][i] = clamp((int)((kApLen[i] + kSpread * c) * size * sr_ / 44100.0f), 8, (int)ap_[c][i].size() - 1);
         }
         send_ = clamp(send / 127.0f, 0.0f, 1.0f);
-        fb_ = 0.62f + 0.355f * clamp(decay / 127.0f, 0.0f, 1.0f);
+        fb_ = 0.70f + 0.28f * std::pow(clamp(decay / 127.0f, 0.0f, 1.0f), 0.8f);
+        damp_ = kDamp[t];
+        preSamples_ = kPreMs[t] * 0.001f * sr_;
     }
     bool active() const { return send_ > 0.0f; }
     void process(float& l, float& r)
     {
-        const float in = (l + r) * 0.5f * 0.25f;
+        // band-limit the input (no boomy lows, no fizzy highs) and pre-delay it
+        float in = (l + r) * 0.5f;
+        inLp_ += inLpA_ * (in - inLp_);
+        inHp_ += inHpA_ * (inLp_ - inHp_);
+        pre_.write(inLp_ - inHp_);
+        const float x = pre_.read(std::fmax(preSamples_, 1.0f)) * 0.03f;
         float out[2];
         for (int c = 0; c < 2; ++c)
         {
@@ -587,8 +674,8 @@ public:
                 std::vector<float>& buf = comb_[c][i];
                 int& pos = combPos_[c][i];
                 const float y = buf[(size_t)pos];
-                combLp_[c][i] += 0.4f * (y - combLp_[c][i]);
-                buf[(size_t)pos] = in + combLp_[c][i] * fb_;
+                combLp_[c][i] = y * (1.0f - damp_) + combLp_[c][i] * damp_;
+                buf[(size_t)pos] = mpc::dsp::flushDenormal(x + combLp_[c][i] * fb_);
                 if (++pos >= combLen_[c][i]) pos = 0;
                 acc += y;
             }
@@ -597,23 +684,26 @@ public:
                 std::vector<float>& buf = ap_[c][i];
                 int& pos = apPos_[c][i];
                 const float b = buf[(size_t)pos];
-                const float y = b - 0.5f * acc;
-                buf[(size_t)pos] = acc + 0.5f * b;
+                const float y = b - acc;
+                buf[(size_t)pos] = mpc::dsp::flushDenormal(acc + 0.5f * b);
                 if (++pos >= apLen_[c][i]) pos = 0;
                 acc = y;
             }
             out[c] = acc;
         }
-        l += out[0] * send_;
-        r += out[1] * send_;
+        l += out[0] * send_ * 1.6f;
+        r += out[1] * send_ * 1.6f;
     }
 private:
-    static constexpr int kCombLen[kCombs] = { 1116, 1277, 1422, 1557 };
-    static constexpr int kApLen[kAps] = { 556, 341 };
+    static constexpr int kSpread = 23;
+    static constexpr int kCombLen[kCombs] = { 1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617 };
+    static constexpr int kApLen[kAps] = { 556, 441, 341, 225 };
     std::vector<float> comb_[2][kCombs], ap_[2][kAps];
     int combPos_[2][kCombs] = {}, combLen_[2][kCombs] = {}, apPos_[2][kAps] = {}, apLen_[2][kAps] = {};
     float combLp_[2][kCombs] = {};
-    float sr_ = 44100.0f, send_ = 0.0f, fb_ = 0.8f;
+    HermiteDelay pre_;
+    float sr_ = 44100.0f, send_ = 0.0f, fb_ = 0.84f, damp_ = 0.25f, preSamples_ = 0.0f;
+    float inHp_ = 0.0f, inLp_ = 0.0f, inHpA_ = 0.02f, inLpA_ = 0.7f;
 };
 
 // Transparent stereo peak limiter with 1.5 ms look-ahead. It turns the level down

@@ -100,6 +100,11 @@ A French README is in `plugins/Jamiro/README.md`.
 
 ## Changes
 
+- **1.0.5**: oscillator octave knobs now go from -3 to +3, centred on 0 (KS patches use -1..+2
+  and keep their settings); rebuilt effects with the same controls: 3-voice stereo chorus,
+  6-stage stereo phaser with deeper notches, tape-style delay (filtered, softly saturated repeats
+  that never run away), denser reverb (8 combs + 4 allpasses per side, pre-delay per room size);
+  preset levels rebalanced; built with the current OpenMPC release tools.
 - **1.0.4**: screen design: switch boxes now show their captions in red (MONO / M.AG /
   POLY1 / POLY2, LP / BP / HP, 12 / 24 dB, CHORUS / PHASER), drawn into the button images so the
   MPC always shows them; menu controls (waves, sync, arp mode/rate...) are boxes with readable
@@ -119,4 +124,4 @@ A French README is in `plugins/Jamiro/README.md`.
 
 ## Licence
 
-MIT, see `LICENSE`. The reverb is a classic Schroeder/Moorer network.
+MIT, see `LICENSE`. The reverb uses the classic public-domain Freeverb comb/allpass tunings.
