@@ -108,3 +108,20 @@ python tools/package.py plugins/Jamiro
 - `art/jamiro_bg_public.png` : fond de l'écran (création originale).
 
 Licence : MIT, code original. La reverb est un réseau Schroeder/Moorer classique (domaine public).
+Le suréchantillonnage 4x (filtres demi-bande IIR polyphase) suit la méthode de la bibliothèque
+HIIR de Laurent de Soras (licence WTFPL) ; les coefficients ont été calculés pour Jamiro.
+
+## Version 1.1
+
+- Overdrive et Distortion calculés en suréchantillonnage 4x : plus d'aliasing métallique dans les
+  aigus quand on pousse le drive (basses heavy, electro, reese / DNB).
+- Compensation de niveau automatique : le volume reste le même du réglage 0 au réglage 127.
+- 1.1.1 : plus de grésillement quand on tourne Overdrive ou Distortion (bouton lissé, l'effet
+  arrive en fondu sur les premiers crans) ; l'Overdrive à 127 n'est plus beaucoup moins fort
+  qu'à 0 ; une nouvelle note ne démarre plus trop bas.
+- 1.1.2 : Distortion refaite comme une pédale de basse : même grain du début à la fin de la
+  note (elle ne dépend plus du volume), 20 % de son clair gardé pour le corps, drive moins
+  extrême et filtre de tonalité (18 kHz → 6 kHz) contre le sifflement dans les aigus.
+- Mêmes paramètres qu'en 1.0 : banques et projets se rechargent à l'identique.
+- CPU : un peu plus quand Overdrive ou Distortion sont au-dessus de 0 (rien de changé à 0).
+

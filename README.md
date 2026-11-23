@@ -105,6 +105,13 @@ A French README is in `plugins/Jamiro/README.md`.
 
 ## Changes
 
+- **1.1.2**: warmer Overdrive and Distortion. Both now run at 4x oversampling (no more metallic
+  aliasing in the treble on heavy, electro and reese / DNB basses), their knobs are smoothed (no
+  crackle when turning them) and the automatic level matching keeps the loudness the same from 0
+  to 127. The Distortion is reworked like a bass pedal: same grit from the start to the end of a
+  note, 20 % clean blend for body, a softer top and a tone low-pass against fizz. Same parameters
+  as before: banks and projects load unchanged. Oversampling filters follow Laurent de Soras' HIIR
+  method (WTFPL).
 - **1.0.8**: the LFOs now have all 32 X-Station shapes, measured on a real X-Station (the 10
   existing shapes keep their place and were corrected: falling saw, triangle starting at the bottom,
   real decay / attack curves, true chromatic scale); new shapes include the envelope curves,

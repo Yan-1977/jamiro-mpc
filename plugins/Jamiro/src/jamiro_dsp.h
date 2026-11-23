@@ -878,12 +878,14 @@ inline float envTauMs(float v)    { return 0.5f * std::exp2(clamp(v, 0.0f, 127.0
 struct Overdrive
 {
     float gPost = 1.0f;
-    bool on = false;
+    float wet = 0.0f;        // 0 at the knob's zero, full from ~13: the first steps fade the
+    bool on = false;         // drive in instead of switching it on with a jump
     void set(float amount)   // 0..127
     {
         const float a = clamp(amount, 0.0f, 127.0f) / 127.0f;
         on = a > 0.0f;
         gPost = 1.0f + 24.0f * a * a;
+        wet = clamp(a * 10.0f, 0.0f, 1.0f);
     }
 };
 

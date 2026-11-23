@@ -33,6 +33,7 @@
 #include "dsp/smoother.h"
 
 #include "jamiro_dsp.h"
+#include "jamiro_oversample.h"
 
 using namespace mpc::dsp;
 using namespace jamiro;
@@ -126,7 +127,7 @@ public:
         i.name = "Jamiro";
         i.vendor = "Yann";
         i.uniqueId = MPC_FOURCC('Y', 'A', 'U', 'p');   // == "uid" in plugin.json. Never change.
-        i.version = 1000;
+        i.version = 1102;
         i.isInstrument = true;
         i.numInputs = 0;
         i.numOutputs = 2;
@@ -305,6 +306,7 @@ public:
         {
             v.amp.setSampleRate(sampleRate); v.mod.setSampleRate(sampleRate);
             v.f1.setSampleRate(sampleRate);  v.f2.setSampleRate(sampleRate);
+        distToneL_.setSampleRate(sampleRate); distToneR_.setSampleRate(sampleRate);
         }
         controllers_.prepare(sampleRate, 10.0f);
         chorus_.prepare(sampleRate);
@@ -329,6 +331,9 @@ public:
         controllers_.reset();
         eq_.reset(); eqR_.reset(); chorus_.reset(); delay_.reset(); reverb_.reset(); limiter_.reset();
         distIn_ = distOut_ = 0.0f; distGain_ = 1.0f;
+        distOsL_.reset(); distOsR_.reset(); distActive_ = false;
+        distToneL_.reset(); distToneR_.reset();
+        odGainHint_ = 1.0f;
         panPhase_ = 0.0f; globalLfoPhase_[0] = globalLfoPhase_[1] = 0.0f;
         volume_.snap(dbToGain(get(kVolume)));
     }
@@ -374,6 +379,9 @@ private:
         float fmIndex = 0.0f, ampVel = 1.0f, modVel = 1.0f, inGain = 1.0f, bpGain = 1.0f;
         float gL = 1.0f, gR = 1.0f;   // unison level compensation + stereo spread
         float odIn = 0.0f, odOut = 0.0f, odGain = 1.0f;   // overdrive level matching
+        Oversampler4x odOs;                               // 4x oversampling for the overdrive
+        float odG = 1.0f, odW = 0.0f;                     // smoothed drive and wet amount
+        bool odActive = false, odFresh = false;          // fresh = note just started
     };
 
     // Per-block snapshot of everything the audio code needs.
@@ -693,7 +701,11 @@ private:
             // level jump (and clipping) instead of a wide, chorused sound.
             for (int o = 0; o < 3; ++o) { v.osc[o].phase = (o == 0 && U == 1) ? 0.0f : v.rng.nextFloat(); v.osc[o].n1 = v.osc[o].n2 = 0.0f; }
             v.f1.reset(); v.f2.reset();
-            v.odIn = v.odOut = 0.0f; v.odGain = 1.0f / std::fmax(overdrive_.gPost, 1.0f);
+            // level matching starts from the gain the last notes settled on, so a new note
+            // does not start very quiet and swell up
+            v.odIn = v.odOut = 0.0f; v.odGain = odGainHint_;
+            v.odG = overdrive_.gPost; v.odW = overdrive_.wet; v.odActive = false; v.odFresh = true;
+            v.odOs.reset();
             v.driftTarget = v.rng.nextBipolar() * s_.drift;
         }
         const bool keys[2] = {s_.l1key, s_.l2key};
@@ -936,15 +948,30 @@ private:
             float y = v.f1.process(mix, mode);
             if (two) y = v.f2.process(y, mode);
             y *= v.bpGain;
-            if (overdrive_.on)
+            if (overdrive_.on || v.odActive)
             {
-                // post-filter drive with per-voice level matching (~30 ms followers)
-                const float dr = fastTanh(overdrive_.gPost * y);
+                // Post-filter tanh drive, run at 4x the sample rate (no aliasing). The knob is
+                // smoothed (no zipper crackle) and the first steps fade the drive in. Per-voice
+                // level matching (~30 ms followers) keeps the loudness of the clean sound:
+                // the saturator squashes hot signals, so the match may turn up (up to x4) as
+                // well as down; the peak limiter at the end catches any overshoot.
+                if (!v.odActive)
+                {
+                    v.odActive = true; v.odOs.prime(y);
+                    if (v.odFresh) { v.odFresh = false; v.odG = overdrive_.gPost; v.odW = overdrive_.wet; }
+                    else { v.odG = overdrive_.gPost; v.odW = 0.0f; v.odIn = v.odOut = 0.0f; v.odGain = 1.0f; }
+                }
+                v.odG += odA_ * (overdrive_.gPost - v.odG);
+                v.odW += odA_ * ((overdrive_.on ? overdrive_.wet : 0.0f) - v.odW);
+                const float g = v.odG, w = v.odW;
+                const float dr = v.odOs.process(y, [g, w](float u) { return u + w * (fastTanh(g * u) - u); });
                 v.odIn += odA_ * (y * y - v.odIn);
                 v.odOut += odA_ * (dr * dr - v.odOut);
-                const float target = v.odOut > 1e-10f ? clamp(std::sqrt(v.odIn / v.odOut), 0.03f, 1.5f) : v.odGain;
+                const float target = v.odOut > 1e-10f ? clamp(std::sqrt(v.odIn / v.odOut), 0.03f, 4.0f) : v.odGain;
                 v.odGain += odA_ * (target - v.odGain);
                 y = dr * v.odGain;
+                if (overdrive_.on) odGainHint_ = v.odGain;
+                else if (v.odW < 1e-4f) v.odActive = false;   // faded out: back to bypass
             }
 
             const float out = y * v.amp.process() * v.ampVel * kVoiceGain;
@@ -960,10 +987,31 @@ private:
         float* L = ctx.outputs[0];
         float* R = ctx.numOutputs > 1 ? ctx.outputs[1] : nullptr;
         const Settings& s = s_;
-        // Distortion: progressive drive (gentle at first, heavy at the top) with automatic
-        // level matching, so the knob changes the grit, not the volume.
-        const float drive = 1.0f + 40.0f * s.dist * s.dist;
-        const float envA = 1.0f - std::exp(-1.0f / (0.06f * sr_));    // 60 ms level followers
+        // Distortion (reworked in 1.1.2), built like a bass distortion pedal:
+        //  1. Level-independent: the signal is divided by its own level (50 ms follower)
+        //     before the saturator and multiplied back after. The grit is the same at the
+        //     start and at the end of a note, and the volume simply follows the envelope
+        //     (1.1.1 drove the decaying signal directly, so the grit and the loudness
+        //     changed as notes died away).
+        //  2. A fixed 20 % of the clean (normalised) signal stays in the blend, like the
+        //     "clean blend" of bass pedals: it keeps the body and the even harmonics that a
+        //     pure square wave loses (that is what sounded hollow and thin).
+        //  3. Tanh at 4x oversampling, softer top (x12 instead of x41 on the normalised
+        //     signal): stays a fat, rounded square instead of a razor-edged one.
+        //  4. Tone low-pass after it (12 dB/oct, 18 kHz at low settings down to 6 kHz at the
+        //     top) removes the fizz above the harmonics that matter.
+        //  5. Slow level match (200 ms) on the normalised signal: same loudness as clean.
+        // The knob is smoothed and the first steps fade the effect in.
+        const float driveTarget = 1.0f + 11.0f * s.dist * s.dist;
+        const float wetTarget = 0.8f * clamp(s.dist * 10.0f, 0.0f, 1.0f);
+        const float knobA = 1.0f - std::exp(-1.0f / (0.03f * sr_));   // 30 ms knob smoothing
+        const float levA = 1.0f - std::exp(-1.0f / (0.05f * sr_));    // 50 ms level detector
+        const float envA = 1.0f - std::exp(-1.0f / (0.2f * sr_));     // 200 ms level match
+        if (s.dist > 0.0f || distActive_)
+        {
+            const float toneHz = 18000.0f * std::pow(6000.0f / 18000.0f, s.dist);
+            distToneL_.set(toneHz, 0.3f); distToneR_.set(toneHz, 0.3f);
+        }
         float gl = 1.0f, gr = 1.0f;
         for (int i = 0; i < ctx.numFrames; ++i)
         {
@@ -975,14 +1023,38 @@ private:
                 gl = std::cos(ang) * kSqrt2; gr = std::sin(ang) * kSqrt2;
             }
             float l = L[i] * s.mixGain, r = (R ? R[i] : L[i]) * s.mixGain;
-            if (s.dist > 0.0f)
+            if (s.dist > 0.0f || distActive_)
             {
-                const float dl = fastTanh(l * drive), dr = fastTanh(r * drive);
-                distIn_ += envA * (0.5f * (l * l + r * r) - distIn_);
+                if (!distActive_)
+                {
+                    distActive_ = true;
+                    distLev_ = 0.5f * (l * l + r * r);
+                    const float lv = std::sqrt(distLev_) + 1e-4f;
+                    distOsL_.prime(l / lv); distOsR_.prime(r / lv);
+                    distDrive_ = driveTarget; distWet_ = 0.0f;
+                    distIn_ = distOut_ = 0.0f; distGain_ = 1.0f;
+                    distToneL_.reset(); distToneR_.reset();
+                }
+                distDrive_ += knobA * (driveTarget - distDrive_);
+                distWet_ += knobA * (wetTarget - distWet_);
+                // 1. normalise by the (stereo-linked) level
+                distLev_ += levA * (0.5f * (l * l + r * r) - distLev_);
+                const float lev = std::sqrt(distLev_) + 1e-4f, inv = 1.0f / lev;
+                const float xl = l * inv, xr = r * inv;
+                // 2 + 3. tanh at 4x with the clean blend (w: 0 -> 0.8)
+                const float d = distDrive_, w = distWet_;
+                const auto shape = [d, w](float u) { return u + w * (fastTanh(d * u) - u); };
+                float dl = distOsL_.process(xl, shape), dr = distOsR_.process(xr, shape);
+                // 4. tone low-pass
+                dl = distToneL_.process(dl, mpc::dsp::SVF::Mode::Lowpass);
+                dr = distToneR_.process(dr, mpc::dsp::SVF::Mode::Lowpass);
+                // 5. slow level match in the normalised domain, then restore the level
+                distIn_ += envA * (0.5f * (xl * xl + xr * xr) - distIn_);
                 distOut_ += envA * (0.5f * (dl * dl + dr * dr) - distOut_);
-                const float target = distOut_ > 1e-9f ? clamp(std::sqrt(distIn_ / distOut_), 0.05f, 1.5f) : 1.0f;
+                const float target = distOut_ > 1e-9f ? clamp(std::sqrt(distIn_ / distOut_), 0.1f, 4.0f) : distGain_;
                 distGain_ += envA * (target - distGain_);
-                l = dl * distGain_; r = dr * distGain_;
+                l = dl * distGain_ * lev; r = dr * distGain_ * lev;
+                if (s.dist <= 0.0f && distWet_ < 1e-4f) distActive_ = false;   // faded out
             }
             l = eq_.process(l) * gl;
             r = eqR_.process(r) * gr;
@@ -1017,6 +1089,12 @@ private:
     Smoother volume_;
     float sr_ = 44100.0f, panPhase_ = 0.0f, globalLfoPhase_[2] = {0.0f, 0.0f};
     float distIn_ = 0.0f, distOut_ = 0.0f, distGain_ = 1.0f;   // distortion level matching
+    Oversampler4x distOsL_, distOsR_;                         // 4x oversampling for the distortion
+    float distDrive_ = 1.0f, distWet_ = 0.0f;                     // smoothed distortion knob
+    float distLev_ = 0.0f;                                        // distortion input level (power)
+    mpc::dsp::SVF distToneL_, distToneR_;                         // distortion tone low-pass
+    bool distActive_ = false;
+    float odGainHint_ = 1.0f;   // overdrive level match the last notes settled on
 };
 
 MPC_PLUGIN_ENTRY(Jamiro)
