@@ -410,8 +410,11 @@ private:
     void readSettings(mpc::ProcessContext& ctx)
     {
         Settings& s = s_;
+        const int oldMode = s.mode, oldUnison = s.unison;
         s.mode = getInt(kVoiceMode);
         s.unison = clamp(getInt(kUnison), 1, kVoices);
+        if ((oldMode <= 1) != (s.mode <= 1) || (s.mode <= 1 && oldUnison != s.unison))
+            voiceLayoutChanged();
         s.uniDetune = get(kUniDetune) / 127.0f * 0.5f;      // semitones at the outer voices
         s.drift = get(kDrift) / 127.0f * 0.35f;
         const float porta = get(kPorta);
@@ -585,12 +588,18 @@ private:
         const int U = s_.unison;
         if (isMono())
         {
+            // A note already in the stack (same key sent twice, e.g. a looped sequence whose
+            // note-on comes before the previous note-off) is moved to the top rather than
+            // stacked twice: otherwise its single note-off would leave the voice held forever.
+            monoRemove(note);
+            if (monoCount_ == kMaxMono) monoRemoveAt(0);   // full: forget the oldest key
             const bool legato = monoCount_ > 0;
-            if (monoCount_ < kMaxMono) monoStack_[monoCount_++] = note;
+            monoStack_[monoCount_++] = note;
             if (!legato)
             {
                 const int from = (s_.mode == 0 && s_.portaCoef < 1.0f) ? lastNote_ : -1;
                 for (int k = 0; k < U; ++k) startVoice(voices_[k], note, vel, k, U, from, true);
+                for (int k = U; k < kVoices; ++k) releaseVoice(voices_[k]);   // leftovers from poly / wider unison
             }
             else monoLegato(note);
             lastNote_ = note;
@@ -616,17 +625,16 @@ private:
     {
         if (isMono())
         {
-            int idx = -1;
-            for (int i = 0; i < monoCount_; ++i) if (monoStack_[i] == note) idx = i;
-            if (idx < 0) return;
-            const bool wasTop = idx == monoCount_ - 1;
-            for (int i = idx; i + 1 < monoCount_; ++i) monoStack_[i] = monoStack_[i + 1];
-            --monoCount_;
+            if (monoCount_ == 0) return;
+            const bool wasTop = monoStack_[monoCount_ - 1] == note;
+            if (!monoRemove(note)) return;
             if (monoCount_ == 0)
             {
-                for (int k = 0; k < s_.unison; ++k)
+                // every voice, not only the current unison count: the unison or the mode
+                // may have changed while the key was down
+                for (Voice& v : voices_)
                 {
-                    Voice& v = voices_[k];
+                    if (!v.active || !v.gate) continue;
                     if (controllers_.sustain()) v.sustained = true; else releaseVoice(v);
                 }
             }
@@ -638,6 +646,29 @@ private:
             {
                 if (controllers_.sustain()) v.sustained = true; else releaseVoice(v);
             }
+    }
+
+    void monoRemoveAt(int idx)
+    {
+        for (int i = idx; i + 1 < monoCount_; ++i) monoStack_[i] = monoStack_[i + 1];
+        --monoCount_;
+    }
+
+    // Removes every copy of `note` from the mono key stack; true if it was there.
+    bool monoRemove(int note)
+    {
+        bool found = false;
+        for (int i = monoCount_ - 1; i >= 0; --i)
+            if (monoStack_[i] == note) { monoRemoveAt(i); found = true; }
+        return found;
+    }
+
+    // Voice mode or unison changed: the key stack and the voices no longer match, so
+    // release everything still held (a held key just stops; the next one plays normally).
+    void voiceLayoutChanged()
+    {
+        monoCount_ = 0;
+        for (Voice& v : voices_) if (v.gate) releaseVoice(v);
     }
 
     // Mono: move the sounding voices to a new note without a new attack.

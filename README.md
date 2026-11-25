@@ -105,6 +105,10 @@ A French README is in `plugins/Jamiro/README.md`.
 
 ## Changes
 
+- **1.1.3**: no more stuck notes in Mono and Mono AG. A key sent twice before its note-off (for
+  example a looped sequence whose next note starts before the previous one ends) no longer leaves
+  a voice held forever, and changing the voice mode or the unison while a key is down releases the
+  held voices cleanly. Same parameters as before: banks and projects load unchanged.
 - **1.1.2**: warmer Overdrive and Distortion. Both now run at 4x oversampling (no more metallic
   aliasing in the treble on heavy, electro and reese / DNB basses), their knobs are smoothed (no
   crackle when turning them) and the automatic level matching keeps the loudness the same from 0
