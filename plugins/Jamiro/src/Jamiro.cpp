@@ -313,6 +313,7 @@ public:
         delay_.prepare(sampleRate);
         reverb_.prepare(sampleRate);
         limiter_.prepare(sampleRate);
+        dcR_ = std::exp(-kTwoPi * 5.0f / sr_);   // 5 Hz: below any note (C0 = 16 Hz)
         volume_.setTime(20.0f, sampleRate);
         volume_.snap(dbToGain(get(kVolume)));
     }
@@ -333,6 +334,7 @@ public:
         distIn_ = distOut_ = 0.0f; distGain_ = 1.0f;
         distOsL_.reset(); distOsR_.reset(); distActive_ = false;
         distToneL_.reset(); distToneR_.reset();
+        dcXL_ = dcYL_ = dcXR_ = dcYR_ = 0.0f;
         panPhase_ = 0.0f; globalLfoPhase_[0] = globalLfoPhase_[1] = 0.0f;
         volume_.snap(dbToGain(get(kVolume)));
     }
@@ -1089,6 +1091,11 @@ private:
             reverb_.process(l, r);
             const float g = volume_.process();
             l = sanitize(l * g); r = sanitize(r * g);
+            // DC blocker: narrow pulse waves (e.g. PW envelopes near -63) carry a large DC
+            // offset; it would eat headroom, push the limiter on one side and thump when
+            // notes start and stop. A 5 Hz high-pass removes it and leaves every note alone.
+            dcYL_ = flushDenormal(l - dcXL_ + dcR_ * dcYL_); dcXL_ = l; l = dcYL_;
+            dcYR_ = flushDenormal(r - dcXR_ + dcR_ * dcYR_); dcXR_ = r; r = dcYR_;
             limiter_.process(l, r);
             L[i] = flushDenormal(l);
             if (R) R[i] = flushDenormal(r);
@@ -1120,6 +1127,7 @@ private:
     float distLev_ = 0.0f;                                        // distortion input level (power)
     mpc::dsp::SVF distToneL_, distToneR_;                         // distortion tone low-pass
     bool distActive_ = false;
+    float dcR_ = 0.9993f, dcXL_ = 0.0f, dcYL_ = 0.0f, dcXR_ = 0.0f, dcYR_ = 0.0f;   // output DC blocker
 };
 
 MPC_PLUGIN_ENTRY(Jamiro)
