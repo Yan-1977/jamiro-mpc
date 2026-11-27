@@ -127,7 +127,7 @@ public:
         i.name = "Jamiro";
         i.vendor = "Yann";
         i.uniqueId = MPC_FOURCC('Y', 'A', 'U', 'p');   // == "uid" in plugin.json. Never change.
-        i.version = 1102;
+        i.version = 1104;
         i.isInstrument = true;
         i.numInputs = 0;
         i.numOutputs = 2;

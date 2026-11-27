@@ -122,6 +122,16 @@ HIIR de Laurent de Soras (licence WTFPL) ; les coefficients ont été calculés 
 - 1.1.2 : Distortion refaite comme une pédale de basse : même grain du début à la fin de la
   note (elle ne dépend plus du volume), 20 % de son clair gardé pour le corps, drive moins
   extrême et filtre de tonalité (18 kHz → 6 kHz) contre le sifflement dans les aigus.
+- 1.1.3 : plus de notes bloquées en Mono / Mono AG.
+- 1.1.4 : l'Overdrive est de nouveau AVANT le filtre, comme sur la X-Station et en 1.0.6.
+  De la 1.0.7 à la 1.1.3, il était après le filtre : les basses filtrées devenaient des ondes
+  carrées avec un grésillement aigu permanent (jusqu'à 10 kHz) sur les notes graves, même
+  filtre fermé (ex. 119 « Old Funk Bass », et les ~100 patchs des banques qui utilisent
+  l'Overdrive). Gardés : suréchantillonnage 4x, bouton lissé, volume compensé (compensation
+  rapide au début de la note, lente ensuite, pour ne pas onduler sur les graves). Nouveau
+  filtre anti-DC à 5 Hz en sortie : les ondes pulse très étroites créaient un fort décalage
+  continu (« poc » en début/fin de note, marge perdue). Volume de 14 patchs réajusté pour
+  rester comme en 1.1.3.
 - Mêmes paramètres qu'en 1.0 : banques et projets se rechargent à l'identique.
 - CPU : un peu plus quand Overdrive ou Distortion sont au-dessus de 0 (rien de changé à 0).
 

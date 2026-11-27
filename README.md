@@ -105,6 +105,13 @@ A French README is in `plugins/Jamiro/README.md`.
 
 ## Changes
 
+- **1.1.4**: low notes no longer buzz. The Overdrive is back at the filter input, as on the
+  X-Station and in 1.0.6: from 1.0.7 to 1.1.3 it drove the filter output, which turned filtered
+  basses into square waves with a steady fizz up to 10 kHz on deep notes, even with the filter
+  closed (about 100 bank patches use it). Kept: 4x oversampling, smoothed knob, level
+  compensation (fast at note start, slow afterwards so it cannot ripple on deep notes). New 5 Hz
+  DC blocker at the output: narrow pulse waves carried a large DC offset (thumps at note start
+  and end, lost headroom). Same parameters: banks and projects load unchanged.
 - **1.1.3**: no more stuck notes in Mono and Mono AG. A key sent twice before its note-off (for
   example a looped sequence whose next note starts before the previous one ends) no longer leaves
   a voice held forever, and changing the voice mode or the unison while a key is down releases the
