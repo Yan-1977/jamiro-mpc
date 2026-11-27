@@ -19,5 +19,12 @@
     "device": "MPC Key 37",
     "firmware": "3.10.1+",
     "date": "2026-11-25"
+  },
+  {
+    "id": "jamiro",
+    "version": "1.1.4",
+    "device": "MPC Key 37",
+    "firmware": "3.10.1+",
+    "date": "2026-11-27"
   }
 ]
