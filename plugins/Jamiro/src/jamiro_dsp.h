@@ -872,19 +872,27 @@ private:
 inline float envAttackMs(float v) { return 1.0f * std::exp2(clamp(v, 0.0f, 127.0f) * (14.0f / 127.0f)); }
 inline float envTauMs(float v)    { return 0.5f * std::exp2(clamp(v, 0.0f, 127.0f) * (14.0f / 127.0f)); }
 
-// Overdrive: drives the FILTER OUTPUT into a tanh saturator, where it adds grit and
-// bite even to square waves and to resonant, closed-filter sounds. It is level-matched
-// per voice in Jamiro.cpp, so the knob changes the character, not the volume.
+// Overdrive: a tanh saturator at the FILTER INPUT, as on the X-Station, so the filter (and
+// its envelope) shapes the harmonics the drive adds: a closing filter still closes, and low
+// notes do not buzz. (1.0.7 - 1.1.3 drove the filter output instead: that turned filtered
+// basses into square waves with a steady fizz up to 10 kHz on every note.)
+// Drive curve as in 1.0.6. `comp` is the make-up gain that keeps a full-level saw at the
+// same RMS level; each voice starts from it, then slow followers in Jamiro.cpp refine it.
 struct Overdrive
 {
-    float gPost = 1.0f;
+    float g = 1.0f, comp = 1.0f;
     float wet = 0.0f;        // 0 at the knob's zero, full from ~13: the first steps fade the
     bool on = false;         // drive in instead of switching it on with a jump
-    void set(float amount)   // 0..127
+    float last = -1.0f;
+    void set(float amount)   // 0..127; cheap when the knob has not moved
     {
+        if (amount == last) return;
+        last = amount;
         const float a = clamp(amount, 0.0f, 127.0f) / 127.0f;
         on = a > 0.0f;
-        gPost = 1.0f + 24.0f * a * a;
+        g = 1.0f + 15.0f * a * a;
+        // RMS of tanh(g*u) for u spread evenly over -1..1 is sqrt(1 - tanh(g)/g); a saw's is sqrt(1/3).
+        comp = std::sqrt((1.0f / 3.0f) / std::fmax(1.0f - std::tanh(g) / g, 1e-6f));
         wet = clamp(a * 10.0f, 0.0f, 1.0f);
     }
 };
